@@ -87,6 +87,7 @@ nextflow run  EBISPOT/gwas-sumstats-harmoniser \
 --file Full_path_of_the_file_to_be_harmonised or --list path_of_list.txt \
 -profile executor,singularity/conda or -profile standard,docker/conda
 ```
+Use `-profile executor` to run on a SLURM cluster or `-profile standard` to run locally.
 Harmonising a batch of files in list.txt file, which is a txt file that each row is a full path of tsv files to be harmonised. 
 
 All results will be stored in the current working directory.
@@ -104,27 +105,6 @@ nextflow run  EBISPOT/gwas-sumstats-harmoniser \
 ### 3.3. Other options:
 * -resume (Execute the script using the cached results)
 
-### 3.4. Other Executors:
-To run the harmonisation pipeline with other executors, user can import the customized config files using `--custom_config path_of_custom_config` and using `-profile` to select the process configuration strategy.
- ```
-profiles {
-
-    cluster {
-        process.executor = 'sge'
-        process.queue = 'long'
-        process.memory = '10GB'
-    }
-
-    cloud {
-        process.executor = 'cirrus'
-        process.container = 'cbcrg/imagex'
-        docker.enabled = true
-    }
-
-}
- ```
-Conda environments are stored on the file system. By default Nextflow instructs Conda to save the required environments in the pipeline work directory. Therefore the same environment can be created/saved multiple times across multiple executions when using a different work directory. You can specify the directory where the Conda environments are stored using the conda.cacheDir in the custom_config file. More setting about executors and container can refer to 
-[Nextflow’s documentation](https://www.nextflow.io/docs/latest/executor.html).
  
 # 4. Harmonisation steps:
 More information about the harmonisation process refers to [GWAS catalog documents](https://www.ebi.ac.uk/gwas/docs/methods/summary-statistics) and [our documentation](https://ebispot.github.io/gwas-sumstats-harmoniser-documentation/)
