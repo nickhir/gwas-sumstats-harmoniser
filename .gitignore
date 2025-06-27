@@ -5,3 +5,7 @@ logs
 .venv
 __pycache__
 *.pyc
+*.nextflow.log*
+test/
+work/
+.nextflow/

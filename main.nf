@@ -1,45 +1,29 @@
 #!/usr/bin/env nextflow
-/*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    nf-core/gwascatalogharm
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Github : 
-    Website: 
-    Slack  : 
-----------------------------------------------------------------------------------------
-*/
 
 nextflow.enable.dsl = 2
-/*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    VALIDATE & PRINT PARAMETER SUMMARY
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*/
-/*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    NAMED WORKFLOW FOR PIPELINE
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*/
-include { PREPARE_REFERENCE } from './workflows/PREPARE_REFERENCE'
-include { GWASCATALOGHARM_GWASCATALOG } from './workflows/gwascatalogharm_gwascatalog'
+
+// import workflow 
+include { PREPARE_REFERENCE_MASTER } from './workflows/PREPARE_REFERENCE_MASTER'
 include { GWASCATALOGHARM } from './workflows/gwascatalogharm'
 
 //
-// WORKFLOW: Run main nf-core/gwascatalogharm analysis pipeline
+// This file gets executed when nextflow run is called.
 //
 workflow NFCORE_GWASCATALOGHARM {
 
     // Check mandatory parameters
-    
+    // if the user doesnt provide any values, they will be set to null
     params.reference = null
     params.gwascatalog = null
     params.harm = null
+
 
     if (!params.chrom) {
     println "ERROR: You didn't set chromsomes to be harmnnised"
     println "Please set --chrom 22 or --chromlist 22,X,Y or set chrom in ./config/default_params.config "
     System.exit(1)
     }
+
 
     if (!params.reference) {
         if (!params.to_build) {
@@ -61,27 +45,11 @@ workflow NFCORE_GWASCATALOGHARM {
             }   
     }
 
-    // check conditinal input parameters
-
+    // if the user provides a reference, we will not run the harmonisation workflow
+    // but the reference preparation workflow
     if (params.reference) {
         println ("Prepare the reference ...")
-        PREPARE_REFERENCE()
-    } 
-    else if (params.gwascatalog) {
-        if (!params.all_harm_folder) {
-            println " ERROR: You didn't set any folder to be harmonised \
-            Please set --all_harm_folder and try again (: "
-            System.exit(1)
-        } 
-        else if (!params.ftp) {
-            println " ERROR: You didn't set any folder to store your final result \
-            Please set --ftp and try again (: "
-            System.exit(1)
-        } 
-        else {
-            println ("Harmonizing files in the folder ${params.all_harm_folder}")
-            GWASCATALOGHARM_GWASCATALOG()
-        }
+        PREPARE_REFERENCE_MASTER()
     } 
     else if (params.harm) {
         if (!params.file && !params.list) { 
@@ -103,22 +71,8 @@ workflow NFCORE_GWASCATALOGHARM {
             }
 }
 
-/*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    RUN ALL WORKFLOWS
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*/
 
-
-// WORKFLOW: Execute a single named workflow for the pipeline
-// See: https://github.com/nf-core/rnaseq/issues/619
-
+// Convention to have it declared like this
 workflow {
     NFCORE_GWASCATALOGHARM ()
 }
-
-/*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    THE END
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*/

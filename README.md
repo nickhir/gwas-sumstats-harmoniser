@@ -46,9 +46,8 @@ nextflow run  EBISPOT/gwas-sumstats-harmoniser \
 Default reference were originally downloaded from 
 ```
 remote_vcf_location = 'ftp://ftp.ensembl.org/pub/current_variation/vcf/homo_sapiens'
-remote_ensembl_variation = 'ftp://ftp.ensembl.org/pub/release-100/mysql/homo_sapiens_variation_100_38'
 ```
-Other version can de defined by using `--remote_vcf_location` and `--remote_ensembl_variation`.
+Other version can de defined by using `--remote_vcf_location`.
 If you want to only run specific chromsomes, `--chrom 22` or `--chromlist 22,X,Y` are available to set it
 
 

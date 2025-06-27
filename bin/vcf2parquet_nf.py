@@ -3,14 +3,10 @@
 
 import pandas as pd
 import argparse
-import pathlib
-import os
 
 def process_file(file,outfile):
     vcf_df = pd.read_csv(file, sep="\t", comment="#", usecols=[0,1,2], names=["CHR", "POS", "ID"],engine='python')
     vcf_df.set_index(["ID"])
-    extensions = "".join(pathlib.Path(file).suffixes)
-    #outfile = file.replace(extensions, ".parquet")
     vcf_df.to_parquet(outfile, index=True)
 
 def main():
