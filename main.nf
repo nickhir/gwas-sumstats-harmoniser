@@ -12,11 +12,7 @@ include { GWASCATALOGHARM } from './workflows/gwascatalogharm'
 workflow NFCORE_GWASCATALOGHARM {
 
     // Check mandatory parameters
-    // if the user doesnt provide any values, they will be set to null
-    params.reference = null
-    params.gwascatalog = null
-    params.harm = null
-
+    // they are all set to null in the nextflow.config file
 
     if (!params.chrom) {
     println "ERROR: You didn't set chromsomes to be harmnnised"

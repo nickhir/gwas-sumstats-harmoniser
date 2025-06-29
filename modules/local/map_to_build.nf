@@ -1,19 +1,18 @@
 process map_to_build {
+    // this tag, i.e. GCST is simply the first value of the tuple
+    // in our case this often corresponds to the basename
     tag "$GCST"
 
-    conda (params.enable_conda ? "${task.ext.conda}" : null)
+    container "${task.ext.singularity}${task.ext.singularity_version}"
 
-    container "${ workflow.containerEngine == 'singularity' &&
-        !task.ext.singularity_pull_docker_container ?
-        "${task.ext.singularity}${task.ext.singularity_version}" :
-        "${task.ext.docker}${task.ext.docker_version}" }"
         
     input:
-    tuple val(GCST), path(yaml), path(tsv)
-    val chr
+        // file contains 3 values that are "unpacked" to the tuple
+        tuple val(GCST), path(yaml), path(tsv)
+        val chr
 
     output:
-    tuple val(GCST), path ('*.merged'), path('unmapped'), path(yaml), emit:mapped
+        tuple val(GCST), path ('*.merged'), path('unmapped'), path(yaml), emit:mapped
 
     shell:
     """
