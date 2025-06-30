@@ -13,7 +13,7 @@ process map_to_build {
 
     output:
         tuple val(GCST), path ('*.merged'), path('unmapped'), path(yaml), emit:mapped
-
+    
     shell:
     """
     coordinate_system=\$(grep coordinate_system $yaml | awk -F ":" '{print \$2}' | tr -d "[:blank:]" )

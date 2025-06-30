@@ -15,6 +15,10 @@ import glob
 import argparse
 from ast import literal_eval
 
+import pyarrow.parquet as pq
+from tqdm import tqdm
+import re
+
 # Allow very large fields in input file-------------
 import sys
 import csv
@@ -46,31 +50,69 @@ def merge_ss_vcf(ss, vcf, from_build, to_build, chroms, coordinate):
     print("ssdf with rsid empty?: {}".format(ssdf_with_rsid.empty))
     # if there are records with rsids
     if not ssdf_with_rsid.empty:
+        # keep track of rsids for which mapping worked so we can remove them later.
+        mapped_rsids = set()
         for vcf in vcfs:
-            # this takes quite a bit of memory... loads every vcf into memory and then mapsl.
-            vcf_df = pd.read_parquet(vcf)
-            chrom = vcf_df.CHR[0]
-            # merge on rsid, update chr and position from vcf ref
-            mergedf = ssdf_with_rsid.merge(
-                vcf_df, left_on=RSID, right_on="ID", how="left"
-            )
-            mapped = mergedf.dropna(subset=["ID"]).drop([CHR_DSET, BP_DSET], axis=1)
-            mapped[CHR_DSET] = (
-                mapped["CHR"].astype("str").str.replace("\..*$", "", regex=True)
-            )
-            mapped[BP_DSET] = (
-                mapped["POS"].astype("str").str.replace("\..*$", "", regex=True)
-            )
-            mapped = mapped[header]
-            mapped[HM_CC_DSET] = "rs"
-            outfile = os.path.join("{}.merged".format(chrom))
-            mapped.to_csv(outfile, sep="\t", index=False, na_rep="NA")
-            ssdf_with_rsid = mergedf[mergedf["ID"].isnull()]
-            ssdf_with_rsid = ssdf_with_rsid[header]
-            if ssdf_with_rsid.empty:
-                break
+            # from the vcf file name, extract the chromosome we are currently processing.
+            pattern = re.compile(r"chr([0-9]+|X|Y)")
+            file_chr = pattern.search(vcf).group(1)
+            if not file_chr:
+                sys.exit(f"Error: could not extract chromosome from path: {vcf}")
 
-    print("finished rsid mapping")
+            # subset the ssdf_with_rsid to the current chromosome
+            # technically, in rare cases where not just the position, but also the chromosome changes.
+            # this kind of mapping will fail. but they will then be liftovered with the "normal" tool anyway.
+            ssdf_with_rsid_subset = ssdf_with_rsid[ssdf_with_rsid[CHR_DSET] == file_chr]
+
+            # connect to the parquet file
+            vcf_pf = pq.ParquetFile(vcf)
+            # now read the parquet file into memory in chunks of 1M rows -> doesnt overwhelm memory
+            for batch in tqdm(
+                vcf_pf.iter_batches(batch_size=3_000_000), desc="Reading VCF"
+            ):
+                vcf_df = batch.to_pandas()
+                chrom = vcf_df.CHR[0]
+                # merge on rsid, update chr and position from vcf ref
+                mergedf = ssdf_with_rsid_subset.merge(
+                    vcf_df, left_on=RSID, right_on="ID", how="left"
+                )
+                mapped = mergedf.dropna(subset=["ID"]).drop([CHR_DSET, BP_DSET], axis=1)
+
+                # Track the successfully mapped rsIDs
+                if not mapped.empty:
+                    mapped_rsids.update(mapped[RSID].tolist())
+
+                mapped[CHR_DSET] = (
+                    mapped["CHR"].astype("str").str.replace("\..*$", "", regex=True)
+                )
+                mapped[BP_DSET] = (
+                    mapped["POS"].astype("str").str.replace("\..*$", "", regex=True)
+                )
+                mapped = mapped[header]
+                mapped[HM_CC_DSET] = "rs"
+                outfile = os.path.join("{}.merged".format(chrom))
+                # if the file does not exist, we will write the header, otherwise just the content
+                write_header = not os.path.exists(outfile)
+                mapped.to_csv(
+                    outfile,
+                    sep="\t",
+                    index=False,
+                    na_rep="NA",
+                    mode="a",
+                    header=write_header,
+                )
+                # now remove the variants that have been successfully mapped from the subset.
+                ssdf_with_rsid_subset = mergedf[mergedf["ID"].isnull()]
+                ssdf_with_rsid_subset = ssdf_with_rsid_subset[header]
+                # if its empty, means we have mapped all, can stop.
+                if ssdf_with_rsid_subset.empty:
+                    break
+
+    # Remove all successfully mapped rsIDs from the original dataframe
+    num_mapped = len(mapped_rsids)
+    ssdf_with_rsid = ssdf_with_rsid[~ssdf_with_rsid[RSID].isin(mapped_rsids)]
+    print(f"finished rsid mapping, successfully mapped {num_mapped} variants")
+
     # liftover the snps without rsids and those with unrecognised rsids
     print("liftover remaining variants")
     ssdf = pd.concat([ssdf_with_rsid, ssdf_without_rsid])
