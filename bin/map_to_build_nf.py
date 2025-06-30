@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python -u
 # -*- coding: utf-8 -*-
 
 # merge on hm_variant_id with vcf of desired build
@@ -7,9 +7,16 @@
 
 import pandas as pd
 import liftover as lft
+import logging
 
 # in common_constants there are a lot of variables defined...
+import sys
+
+sys.path.append(
+    "/rds/user/nh608/hpc-work/phenoscanner/harmoniser/gwas-sumstats-harmoniser/bin"
+)
 from common_constants import *
+
 import os
 import glob
 import argparse
@@ -20,7 +27,6 @@ from tqdm import tqdm
 import re
 
 # Allow very large fields in input file-------------
-import sys
 import csv
 
 maxInt = sys.maxsize
@@ -39,6 +45,7 @@ while True:
 # map_to_build----------------------------------------------------
 def merge_ss_vcf(ss, vcf, from_build, to_build, chroms, coordinate):
     vcfs = glob.glob(vcf)
+    logging.info("test logging")
     ssdf = pd.read_table(ss, sep=None, engine="python", dtype=str)
     add_fields_if_missing(df=ssdf)
     # creates a list of True False depending on if there is an rsid
@@ -66,12 +73,14 @@ def merge_ss_vcf(ss, vcf, from_build, to_build, chroms, coordinate):
 
             # connect to the parquet file
             vcf_pf = pq.ParquetFile(vcf)
-            # now read the parquet file into memory in chunks of 1M rows -> doesnt overwhelm memory
+            # now read the parquet file into memory in chunks of 250k rows -> doesnt overwhelm memory
             for batch in tqdm(
-                vcf_pf.iter_batches(batch_size=3_000_000), desc="Reading VCF"
+                vcf_pf.iter_batches(batch_size=250_000),
+                desc="Reading VCF",
+                file=sys.stdout,
             ):
                 vcf_df = batch.to_pandas()
-                chrom = vcf_df.CHR[0]
+                chrom = vcf_df.CHR.iloc[0]
                 # merge on rsid, update chr and position from vcf ref
                 mergedf = ssdf_with_rsid_subset.merge(
                     vcf_df, left_on=RSID, right_on="ID", how="left"
