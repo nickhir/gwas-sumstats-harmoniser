@@ -16,29 +16,39 @@ workflow major_direction{
         chroms=chr.flatten().map{it.toString().replaceAll("chr","")}.collect()
         map_to_build(files,chroms)
         //example: output is [GCST1,[path of 1.merged, path of 2.merged .....]]
+        // map_to_build.out.mapped looks like this
+        // [GCST_ID, [path to 1.merged, path to 2.merged] [path to unmerged] [path to yaml]]
+        // transpose trasforms it into something like this
+        // [GCST_ID, path to 1.merged, path to unmerged,path to yaml]
+        // [GCST_ID, path to 2.merged, path to unmerged,path to yaml]
+        // [GCST_ID, path to 3.merged, path to unmerged,path to yaml]
+        // ...
+        // then we just extract information and store it in the channel "map_chr_ch"
         map_to_build.out.mapped
                         .transpose()
                         .map{tuple(get_chr(it[1]),it[0],it[1],it[3])}
                         .set{map_chr_ch}
+
         // capture unmapped sites for reporting
         unmapped = map_to_build.out.mapped.map{tuple(it[0],it[2])}
         
-        //example: out of map_to_build [GCST010681,[1,2,...]] tranpose into [[GCST010681,path 1.merged],[GCST010681,path 2.merged]] and then into [chr1,GCST010681,path 1.merged][chr2,GCST010681,path 2.merged].....
-        
-        Channel.fromPath("${params.ref}/homo_sapiens-chr*.vcf.gz") 
-            .map { prepare_reference (it) }
-            .set{ ref_chr_ch }
         // joint is still needed in case not all chr are running
         /* example:
         homo_sapiens-chr1.vcf.gz ->[chr1, path of homo_sapiens-chr1.vcf.gz] (ref_ch_chr)
-        */
+        */       
+        Channel.fromPath("${params.ref}/homo_sapiens-chr*.vcf.gz") 
+            .map { prepare_reference (it) }
+            .set{ ref_chr_ch }
         
-        count_ch=map_chr_ch.combine(ref_chr_ch,by:0)
+        
         /* example
         [chr1, path of homo_sapiens-chr1.vcf.gz] (ref_chr_ch) + 
         [chr1, GCST1, path of 1.merged] (map_chr_ch)
         -> [chr1, GCST1, path of 1.merged,path of homo_sapiens-chr1.vcf.gz] (count_ch) 
         */
+        // combine is essentially a join in this case based on the first element (chromosome name)
+        count_ch=map_chr_ch.combine(ref_chr_ch,by:0)
+        
         
         ten_percent_counts(count_ch)
         // need to count the  number of outputs and wait until all the chromosomes have completed

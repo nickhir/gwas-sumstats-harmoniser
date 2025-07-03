@@ -11,6 +11,7 @@ import liftover as lft
 
 # in common_constants there are a lot of variables defined...
 import sys
+import fcntl
 sys.path.append(
     "/rds/user/nh608/hpc-work/phenoscanner/harmoniser/gwas-sumstats-harmoniser/bin"
 )
@@ -107,18 +108,25 @@ def merge_ss_vcf(ss, vcf, from_build, to_build, chroms, coordinate):
                 outfile = os.path.join("{}.merged".format(chrom))
                 # if the file does not exist, we will write the header, otherwise just the content
                 write_header = not os.path.exists(outfile)
-                mapped.to_csv(
-                    outfile,
-                    sep="\t",
-                    index=False,
-                    na_rep="NA",
-                    mode="a",
-                    header=write_header,
-                )
-                # remove them successfully mapped rsids from the ssdf_with_rsid_subset to speed up merge step
-                ssdf_with_rsid_subset = mergedf.loc[mergedf["ID"].isnull(), header]
 
-                
+                # this is to ensure only one thread at a time can write to the outputfile.
+                # i.e. as soon as a thread reaches the point it locks the file, writes and then releases
+                # it for the next thread
+                with open(outfile, "a") as f:
+                    fcntl.flock(f, fcntl.LOCK_EX)
+                    mapped.to_csv(
+                            f,
+                            sep="\t",
+                            index=False,
+                            na_rep="NA",
+                            header=write_header
+                        )
+                    fcntl.flock(f, fcntl.LOCK_UN)
+
+                # remove them successfully mapped rsids from the ssdf_with_rsid_subset to speed up merge step
+                ssdf_with_rsid_subset = mergedf[mergedf["ID"].isnull()]
+                ssdf_with_rsid_subset = ssdf_with_rsid[header]
+
 
     # Remove all successfully mapped rsIDs from the original dataframe
     num_mapped = len(mapped_rsids)
