@@ -3,6 +3,7 @@
 
 import argparse
 import pandas as pd
+import numpy as np
 import shutil
 from common_constants import PVAL_DSET
 
@@ -27,18 +28,24 @@ def main():
         return
 
     sig_mask = pvals[PVAL_DSET] < 1e-5
-    n_sig = int(sig_mask.sum())
 
-    df = pd.read_table(args.f, sep=None, engine='python', dtype=str)
-    sig_df = df[sig_mask]
-    nonsig_df = df[~sig_mask]
+    sig_idx = sig_mask[sig_mask].index.tolist()
+    nonsig_idx = sig_mask[~sig_mask].index.tolist()
 
-    n_non_sig_sample = max(0, limit - len(sig_df))
-    if len(nonsig_df) > n_non_sig_sample:
-        nonsig_df = nonsig_df.sample(n=n_non_sig_sample, random_state=42)
+    n_non_sig_sample = max(0, limit - len(sig_idx))
+    rng = np.random.default_rng(42)
+    if len(nonsig_idx) > n_non_sig_sample:
+        sample_idx = rng.choice(nonsig_idx, n_non_sig_sample, replace=False)
+    else:
+        sample_idx = nonsig_idx
 
-    out_df = pd.concat([sig_df, nonsig_df])
-    out_df.to_csv(args.o, sep='\t', index=False, na_rep='NA')
+    keep_rows = set(sig_idx) | set(sample_idx)
+
+    with open(args.f) as fin, open(args.o, 'w') as fout:
+        fout.write(next(fin))  # header
+        for i, line in enumerate(fin):
+            if i in keep_rows:
+                fout.write(line)
 
 
 if __name__ == '__main__':
