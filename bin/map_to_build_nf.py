@@ -1,4 +1,4 @@
-#!/usr/bin/env python -u
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 # merge on hm_variant_id with vcf of desired build
@@ -56,9 +56,10 @@ def merge_ss_vcf(ss, vcf, from_build, to_build, chroms, coordinate):
     print("starting rsid mapping")
     print("ssdf with rsid empty?: {}".format(ssdf_with_rsid.empty))
     # if there are records with rsids
+
+    # keep track of rsids for which mapping worked so we can remove them later.
+    mapped_rsids = set()
     if not ssdf_with_rsid.empty:
-        # keep track of rsids for which mapping worked so we can remove them later.
-        mapped_rsids = set()
         for vcf in vcfs:
             # from the vcf file name, extract the chromosome we are currently processing.
             pattern = re.compile(r"chr([0-9]+|X|Y)")
@@ -82,9 +83,9 @@ def merge_ss_vcf(ss, vcf, from_build, to_build, chroms, coordinate):
 
             # connect to the parquet file
             vcf_pf = pq.ParquetFile(vcf)
-            # now read the parquet file into memory in chunks of 250k rows -> doesnt overwhelm memory
+            # now read the parquet file into memory in chunks of 2M rows -> doesnt overwhelm memory
             for batch in tqdm(
-                vcf_pf.iter_batches(batch_size=250_000),
+                vcf_pf.iter_batches(batch_size=2_000_000),
                 desc="Reading VCF",
                 file=sys.stdout,
             ):
