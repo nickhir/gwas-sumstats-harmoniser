@@ -7,7 +7,7 @@
 
 import pandas as pd
 import liftover as lft
-import logging
+
 
 # in common_constants there are a lot of variables defined...
 import sys
@@ -45,7 +45,7 @@ while True:
 # map_to_build----------------------------------------------------
 def merge_ss_vcf(ss, vcf, from_build, to_build, chroms, coordinate):
     vcfs = glob.glob(vcf)
-    logging.info("test logging")
+
     ssdf = pd.read_table(ss, sep=None, engine="python", dtype=str)
     add_fields_if_missing(df=ssdf)
     # creates a list of True False depending on if there is an rsid
@@ -65,6 +65,15 @@ def merge_ss_vcf(ss, vcf, from_build, to_build, chroms, coordinate):
             file_chr = pattern.search(vcf).group(1)
             if not file_chr:
                 sys.exit(f"Error: could not extract chromosome from path: {vcf}")
+
+            # if the chromosome is not in the list of chromosomes to process, skip it.
+            if file_chr not in chroms:
+                print(
+                    "skipping chromosome {} as it is not in the list of chromosomes to process".format(
+                        file_chr
+                    )
+                )
+                continue
 
             # subset the ssdf_with_rsid to the current chromosome
             # technically, in rare cases where not just the position, but also the chromosome changes.
@@ -110,17 +119,11 @@ def merge_ss_vcf(ss, vcf, from_build, to_build, chroms, coordinate):
                     mode="a",
                     header=write_header,
                 )
-                # now remove the variants that have been successfully mapped from the subset.
-                ssdf_with_rsid_subset = mergedf[mergedf["ID"].isnull()]
-                ssdf_with_rsid_subset = ssdf_with_rsid_subset[header]
-                # if its empty, means we have mapped all, can stop.
-                if ssdf_with_rsid_subset.empty:
-                    break
 
     # Remove all successfully mapped rsIDs from the original dataframe
     num_mapped = len(mapped_rsids)
-    ssdf_with_rsid = ssdf_with_rsid[~ssdf_with_rsid[RSID].isin(mapped_rsids)]
     print(f"finished rsid mapping, successfully mapped {num_mapped} variants")
+    ssdf_with_rsid = ssdf_with_rsid[~ssdf_with_rsid[RSID].isin(mapped_rsids)]
 
     # liftover the snps without rsids and those with unrecognised rsids
     print("liftover remaining variants")
