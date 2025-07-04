@@ -5,6 +5,7 @@ import argparse
 import pandas as pd
 import numpy as np
 import shutil
+import gzip
 from common_constants import PVAL_DSET
 
 
@@ -18,35 +19,72 @@ def parse_args():
     return parser.parse_args()
 
 
+def detect_delim(header_line: str) -> str:
+    """Return the delimiter used in the file."""
+    if "\t" in header_line:
+        return "\t"
+    if "," in header_line:
+        return ","
+    return None  # whitespace
+
+
+def read_pval(line: str, idx: int, delim: str) -> float:
+    parts = line.split(delim) if delim else line.split()
+    return float(parts[idx])
+
+
+def open_file(file_path: str, mode: str = "rt"):
+    """Open a file, handling gzipped files automatically."""
+    if file_path.endswith(".gz"):
+        return gzip.open(file_path, mode)
+    return open(file_path, mode)
+
+
 def main():
     args = parse_args()
     limit = args.l
 
-    # read only p-value column to get counts
-    pvals = pd.read_table(args.f, usecols=[PVAL_DSET], sep=None, engine="python")
-    total = len(pvals)
-    # if the total number of variants is less than or equal to the limit dont do anything.
+    # read in file line by line to not overload memory...
+    with open_file(args.f) as f:
+        header_line = next(f)
+
+    delim = detect_delim(header_line)
+    header_cols = header_line.strip().split(delim) if delim else header_line.split()
+    # get the index of the p-value column
+    pval_idx = header_cols.index(PVAL_DSET)
+
+    # first pass: count total rows and collect significant indices
+    sig_idx = []
+    total = 0
+    with open_file(args.f) as f:
+        next(f)  # skip header
+        for i, line in enumerate(f):
+            total += 1
+            try:
+                pval = read_pval(line, pval_idx, delim)
+            except (IndexError, ValueError):
+                continue
+            if pval < 1e-5:
+                sig_idx.append(i)
+
+    # if the total number of variants is less than or equal to the limit, copy the file directly
     if total <= limit:
-        shutil.copyfile(args.f, args.o)
+        with open_file(args.f, "rb") as fin, open(args.o, "wb") as fout:
+            shutil.copyfileobj(fin, fout)
         return
 
-    sig_mask = pvals[PVAL_DSET] < 1e-5
+    # calculate the number of random rows to sample
+    n_random_sample = limit - len(sig_idx)
 
-    # turns the bool list into a list of indices (row positions)
-    sig_idx = sig_mask[sig_mask].index.tolist()
-    nonsig_idx = sig_mask[~sig_mask].index.tolist()
-
-    # how many random rows do we have to sample to get to the limit?
-    n_non_sig_sample = max(0, limit - len(sig_idx))
+    # randomly sample indices
     rng = np.random.default_rng(42)
-    if len(nonsig_idx) > n_non_sig_sample:
-        sample_idx = rng.choice(nonsig_idx, n_non_sig_sample, replace=False)
-    else:
-        sample_idx = nonsig_idx
+    random_idx = rng.choice(total, n_random_sample, replace=False)
 
-    keep_rows = set(sig_idx) | set(sample_idx)
+    # combine significant indices and random indices
+    keep_rows = set(sig_idx) | set(random_idx)
 
-    with open(args.f) as fin, open(args.o, "w") as fout:
+    # write the output file
+    with open_file(args.f) as fin, open(args.o, "w") as fout:
         fout.write(next(fin))  # header
         for i, line in enumerate(fin):
             if i in keep_rows:
