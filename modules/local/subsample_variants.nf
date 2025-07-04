@@ -1,12 +1,8 @@
 process subsample_variants {
     tag "$GCST"
 
-    conda (params.enable_conda ? "${task.ext.conda}" : null)
+    container "${task.ext.singularity}${task.ext.singularity_version}"
 
-    container "${ workflow.containerEngine == 'singularity' &&
-        !task.ext.singularity_pull_docker_container ?
-        "${task.ext.singularity}${task.ext.singularity_version}" :
-        "${task.ext.docker}${task.ext.docker_version}" }"
 
     input:
         tuple val(GCST), path(yaml), path(tsv)

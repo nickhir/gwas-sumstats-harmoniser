@@ -86,7 +86,7 @@ if [ $palin_mode = "drop" ]; then
 else
    if [[ $ratio =~ "Full" ]]; then
        printf "Direction of palindromic SNPs inferred as %s by establishing consensus direction of all sites (forward sites ratio = %.4f).\n" "$palin_mode" "$number" >> "$output"
-   elif [[ $ratio =~ "10_percent" ]]; then
+   elif [[ $ratio =~ "50_percent" ]]; then
        printf "Direction of palindromic SNPs inferred as %s by establishing consensus direction of 10% of all sites (forward sites ratio = %.4f).\n" "$palin_mode" "$number" >> "$output"
    else
        printf "Direction of palindromic SNPs inferred as %s by establishing consensus direction (forward sites ratio = %.4f).\n" "$palin_mode" "$number" >> "$output"

@@ -15,8 +15,8 @@ process ten_percent_counts {
     # if more than 100 rows, then we sample 10 % of it, else we take all
     select=\$[\$(wc -l < $merged)]
 
-    if [ \$[\$select/10] -gt 100 ]
-    then n=\$[\$select/10]
+    if [ \$[\$select/2] -gt 100 ]
+    then n=\$[\$select/2]
     else n=\$select
     fi
 

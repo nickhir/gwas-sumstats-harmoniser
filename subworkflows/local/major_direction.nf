@@ -1,5 +1,6 @@
 include {map_to_build} from '../../modules/local/map_to_build'
 include {subsample_variants} from '../../modules/local/subsample_variants'
+include {filter_significant_variants} from '../../modules/local/filter_significant'
 include {ten_percent_counts} from '../../modules/local/ten_percent_counts'
 include {ten_percent_counts_sum} from '../../modules/local/ten_percent_counts_sum'
 include {generate_strand_counts} from '../../modules/local/generate_strand_counts'
@@ -30,6 +31,12 @@ workflow major_direction{
                         .transpose()
                         .map{tuple(get_chr(it[1]),it[0],it[1],it[3])}
                         .set{map_chr_ch}
+        
+        // run the filter_significant_variants module
+        filter_significant_variants(map_chr_ch)
+        // assign the output of filter_significant_variants to a channel called "sig_chr_ch". This contains a tuple with the output of filter_significant_variants
+        // tuple val(chrom), val(GCST), path("${chrom}.significant.merged"), path(yaml)
+        filter_significant_variants.out.filtered.set{sig_chr_ch}
 
         // capture unmapped sites for reporting
         unmapped = map_to_build.out.mapped.map{tuple(it[0],it[2])}
@@ -50,15 +57,23 @@ workflow major_direction{
         */
         // combine is essentially a join in this case based on the first element (chromosome name)
         count_ch=map_chr_ch.combine(ref_chr_ch,by:0)
+
+        // perform merge. adds the path to the reference to the output of filter_significant_variants
+        filtered_count_ch=sig_chr_ch.combine(ref_chr_ch,by:0)
+
         
-        
+        // we still perform the ten_percent_counts on the whole subset
         ten_percent_counts(count_ch)
-        // need to count the  number of outputs and wait until all the chromosomes have completed
+        
+        
+        // get the number of chromosomes
         int nchr=params.chrom.size()
+
+
         ten_to_sum=ten_percent_counts.out
                         .ten_sc
-                        .groupTuple(by: 0)
-                        .branch{pass:it[1].size()==nchr}
+                        .groupTuple(by: 0) // combine the outputs by GCST ID -> [GCST_ID, [[list to .sc files per chrom]]]
+                        .branch{pass:it[1].size()==nchr} //if the number of .sc is not equal to the total number of processed chromosomes we stop. otherwise continue
                         .map{it[0]}
 
         // example: ten_to_sum [GCST1],[GCST2].....
@@ -90,7 +105,7 @@ workflow major_direction{
         // [GCST, ten_percent, forward,contiune] (contiune_branch)
         all_files=summarise_strand_counts.out.all_sum.mix(branch.contiune)
         //hm_input: [GCST,path ten_percent.tsv,forward,countiune],[GCST,path Full.tsv,reverse,countiune]
-        rearrnaged_count_ch=count_ch.map{tuple(it[1],it[0],it[2],it[3],it[4])}
+        rearrnaged_count_ch=filtered_count_ch.map{tuple(it[1],it[0],it[2],it[3],it[4])}
         // example: [chr1, GCST1, path of 1.merged,path of homo_sapiens-chr1.vcf.gz] (count_ch) 
         // example into: [GCST1,chr1,path of merged, path of vcf]
         all_input=all_files.combine(rearrnaged_count_ch,by:0)

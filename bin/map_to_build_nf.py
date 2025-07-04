@@ -11,6 +11,7 @@ import liftover as lft
 
 # in common_constants there are a lot of variables defined...
 import sys
+
 sys.path.append(
     "/rds/user/nh608/hpc-work/phenoscanner/harmoniser/gwas-sumstats-harmoniser/bin"
 )
@@ -82,7 +83,7 @@ def merge_ss_vcf(ss, vcf, from_build, to_build, chroms, coordinate):
 
             # connect to the parquet file
             vcf_pf = pq.ParquetFile(vcf)
-            # now read the parquet file into memory in chunks of 4M rows -> doesnt overwhelm memory
+            # now read the parquet file into memory in chunks of 1M rows -> doesnt overwhelm memory
             for batch in vcf_pf.iter_batches(batch_size=1_000_000):
                 vcf_df = batch.to_pandas()
                 chrom = vcf_df.CHR.iloc[0]
@@ -117,8 +118,6 @@ def merge_ss_vcf(ss, vcf, from_build, to_build, chroms, coordinate):
                 )
                 # remove them successfully mapped rsids from the ssdf_with_rsid_subset to speed up merge step
                 ssdf_with_rsid_subset = mergedf.loc[mergedf["ID"].isnull(), header]
-
-                
 
     # Remove all successfully mapped rsIDs from the original dataframe
     num_mapped = len(mapped_rsids)
