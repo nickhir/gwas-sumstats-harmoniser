@@ -14,7 +14,7 @@ def parse_args():
     parser.add_argument("-f", required=True, help="Input summary statistics file")
     parser.add_argument("-o", required=True, help="Output subsampled file")
     parser.add_argument(
-        "-l", type=int, default=10000000, help="Maximum number of variants to keep"
+        "-l", type=int, default=200000, help="Maximum number of variants to keep"
     )
     return parser.parse_args()
 
@@ -52,7 +52,7 @@ def main():
     header_cols = header_line.strip().split(delim) if delim else header_line.split()
     # get the index of the p-value column
     pval_idx = header_cols.index(PVAL_DSET)
-
+    print(pval_idx)
     # first pass: count total rows and collect significant indices
     sig_idx = []
     total = 0
@@ -66,11 +66,21 @@ def main():
                 continue
             if pval < 1e-5:
                 sig_idx.append(i)
-
+    print(total)
+    print(len(sig_idx))
     # if the total number of variants is less than or equal to the limit, copy the file directly
     if total <= limit:
         with open_file(args.f, "rb") as fin, open(args.o, "wb") as fout:
             shutil.copyfileobj(fin, fout)
+        return
+
+    if len(sig_idx) >= limit:
+        keep_rows = set(sig_idx)
+        with open_file(args.f) as fin, open(args.o, "w") as fout:
+            fout.write(next(fin))  # header
+            for i, line in enumerate(fin):
+                if i in keep_rows:
+                    fout.write(line)
         return
 
     # calculate the number of random rows to sample
