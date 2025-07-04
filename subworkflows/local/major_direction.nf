@@ -1,4 +1,5 @@
 include {map_to_build} from '../../modules/local/map_to_build'
+include {subsample_variants} from '../../modules/local/subsample_variants'
 include {ten_percent_counts} from '../../modules/local/ten_percent_counts'
 include {ten_percent_counts_sum} from '../../modules/local/ten_percent_counts_sum'
 include {generate_strand_counts} from '../../modules/local/generate_strand_counts'
@@ -14,7 +15,8 @@ workflow major_direction{
     main:
         // chroms is just a list of 1,2,3,4...
         chroms=chr.flatten().map{it.toString().replaceAll("chr","")}.collect()
-        map_to_build(files,chroms)
+        subsample_variants(files)
+        map_to_build(subsample_variants.out.subsampled, chroms)
         //example: output is [GCST1,[path of 1.merged, path of 2.merged .....]]
         // map_to_build.out.mapped looks like this
         // [GCST_ID, [path to 1.merged, path to 2.merged] [path to unmerged] [path to yaml]]
