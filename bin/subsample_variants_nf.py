@@ -45,12 +45,16 @@ def parse_args():
     return parser.parse_args()
 
 
-def detect_delim(header_line: str) -> str:
+def detect_delim(header_line):
     """Return the delimiter used in the file."""
     if "\t" in header_line:
         return "\t"
     if "," in header_line:
         return ","
+    if ";" in header_line:
+        return ";"
+    if "|" in header_line:
+        return "|"
     return None  # whitespace
 
 
@@ -71,7 +75,19 @@ def open_file(file_path: str, mode: str = "rt"):
 # if not, we just keep the original one.
 def canonicalise_header(header):
     """Replace known aliases with canonical column names."""
-    return [ALIAS_LOOKUP.get(col.lower(), col) for col in header]
+    canonical_header = []
+    for col in header:
+        original = col
+        canonical = ALIAS_LOOKUP.get(col.lower(), col)
+
+        if original.lower() != canonical.lower():
+            print(f"{original} was replaced with {canonical}")
+        else:
+            print(f"{original} was not replaced")
+
+        canonical_header.append(canonical)
+
+    return canonical_header
 
 
 # all it does is go through potential names of the "pval" column
@@ -114,10 +130,12 @@ def main():
     # get the index of the p-value column
     canon_header = canonicalise_header(header_cols)
     # create the output header
-    header_out = (delim or " ").join(canon_header) + "\n"
+    header_out = "\t".join(str(x) for x in canon_header) + "\n"
     # check if required columns were deteceted, otherwise exit
     check_required_columns(canon_header)
     pval_idx = canon_header.index(PVAL_DSET)
+    print(pval_idx)
+    print(header_out)
     # first pass: count total rows and collect significant indices
     sig_idx = []
     total = 0
@@ -131,6 +149,7 @@ def main():
                 continue
             if pval < 1e-5:
                 sig_idx.append(i)
+
     # if the total number of variants is less than or equal to the limit, copy the file directly
     if total <= limit:
         with open_file(args.f) as fin, open(args.o, "w") as fout:
@@ -140,6 +159,7 @@ def main():
                 fout.write(line)
         return
 
+    # if more significant variants than the limit, write all significant variants
     if len(sig_idx) >= limit:
         keep_rows = set(sig_idx)
         with open_file(args.f) as fin, open(args.o, "w") as fout:

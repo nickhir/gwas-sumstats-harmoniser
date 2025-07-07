@@ -1,5 +1,4 @@
 PVAL_DSET = "p_value"
-PVAL_DSET = "p_value"
 CHR_DSET = "chromosome"
 BP_DSET = "base_pair_location"
 OR_DSET = "odds_ratio"
@@ -133,7 +132,6 @@ COLUMN_ALIASES = {
     EFFECT_DSET: [
         "ea",
         "alt",
-        "effect",
         "effect_allele",
         "alt_allele",
         "ALT_ALLELE",
@@ -145,7 +143,8 @@ COLUMN_ALIASES = {
         "non_effect",
         "other",
         "other_allele",
-        "reference_allele" "oa",
+        "reference_allele",
+        "oa",
         "ref_allele",
     ],
     FREQ_DSET: ["eaf", "freq", "A1FREQ", "ALT_AF"],
