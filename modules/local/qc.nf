@@ -21,7 +21,6 @@ process qc {
     basic_qc_nf.py \
     -f $all_hm \
     -o harmonised.qc.tsv \
-    --log report.txt \
-    -db ${params.ref}/rsID.sql
+    --log report.txt 
     """
 }

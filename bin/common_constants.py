@@ -125,7 +125,6 @@ COLUMN_ALIASES = {
         "rsid",
         "rs_id",
         "variantid",
-        "variant_id_hg19",
         "varid",
         "snp_id",
     ],
@@ -147,7 +146,7 @@ COLUMN_ALIASES = {
         "oa",
         "ref_allele",
     ],
-    FREQ_DSET: ["eaf", "freq", "A1FREQ", "ALT_AF"],
+    FREQ_DSET: ["eaf", "freq", "ALT_AF"],
 }
 
 # Reverse lookup table: alias -> canonical column name.
