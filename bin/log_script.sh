@@ -27,6 +27,7 @@ do
       u ) unmapped="$OPTARG" ;;
       o ) output="$OPTARG" ;;
       p ) version="$OPTARG" ;;
+      a ) alias="$OPTARG" ;;
       ? ) helpFunction ;; # Print helpFunction in case parameter is non-existent
    esac
 done

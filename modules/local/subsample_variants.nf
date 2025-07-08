@@ -8,7 +8,7 @@ process subsample_variants {
         tuple val(GCST), path(yaml), path(tsv)
 
     output:
-        tuple val(GCST), path(yaml), path("${GCST}.subsampled.tsv"), emit: subsampled
+        tuple val(GCST), path(yaml), path("${GCST}.subsampled.tsv"), path("${GCST}.header_alias.log"), emit: subsampled
 
     shell:
     """

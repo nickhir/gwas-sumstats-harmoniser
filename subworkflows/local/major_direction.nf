@@ -18,7 +18,7 @@ workflow major_direction{
         chroms=chr.flatten().map{it.toString().replaceAll("chr","")}.collect()
         subsample_variants(files)
         alias_ch=subsample_variants.out.subsampled.map{tuple(it[0],it[3])}
-        map_to_build(subsample_variants.out.subsampled, chroms)
+        map_to_build(subsample_variants.out.subsampled.map{it[0..2]}, chroms)
         //example: output is [GCST1,[path of 1.merged, path of 2.merged .....]]
         // map_to_build.out.mapped looks like this
         // [GCST_ID, [path to 1.merged, path to 2.merged] [path to unmerged] [path to yaml]]
