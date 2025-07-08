@@ -1,4 +1,5 @@
 PVAL_DSET = "p_value"
+NEG_LOG_PVAL_DSET = "neg_log_10_p_value"
 CHR_DSET = "chromosome"
 BP_DSET = "base_pair_location"
 OR_DSET = "odds_ratio"
@@ -6,7 +7,7 @@ RANGE_U_DSET = "ci_upper"
 RANGE_L_DSET = "ci_lower"
 BETA_DSET = "beta"
 ZSCORE_DSET = "z_score"
-RSID = "variant_id"
+RSID = "rsid"
 EFFECT_DSET = "effect_allele"
 OTHER_DSET = "other_allele"
 FREQ_DSET = "effect_allele_frequency"
@@ -121,8 +122,7 @@ COLUMN_ALIASES = {
         "snp",
         "snpid",
         "markername",
-        "RSID",
-        "rsid",
+        "variant_id",
         "rs_id",
         "variantid",
         "varid",
@@ -147,7 +147,9 @@ COLUMN_ALIASES = {
         "ref_allele",
     ],
     FREQ_DSET: ["eaf", "freq", "ALT_AF"],
+    NEG_LOG_PVAL_DSET: ["neglog10p", "neg_log_p", "neg_log10_p", "neg_log_pvalue"],
 }
+
 
 # Reverse lookup table: alias -> canonical column name.
 # is quite a long dictonary, i.e. {p: p_value, pval: p_value, pvalue: p_value,...}

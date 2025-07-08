@@ -7,6 +7,7 @@ import gzip
 import sys
 from common_constants import (
     PVAL_DSET,
+    NEG_LOG_PVAL_DSET,
     COLUMN_ALIASES,
     ALIAS_LOOKUP,
     CHR_DSET,
@@ -28,7 +29,6 @@ REQUIRED_COLUMNS = [
     BP_DSET,
     EFFECT_DSET,
     OTHER_DSET,
-    PVAL_DSET,
 ]
 
 # At least one of these effect size columns must be present
@@ -92,22 +92,32 @@ def canonicalise_header(header):
 
 # all it does is go through potential names of the "pval" column
 # and if the potential name matches any name in the header, return that index which is used for the read_pval function
-def detect_pval_idx(header):
-    """Return the index of the p-value column using aliases."""
-    for candidate in [PVAL_DSET] + COLUMN_ALIASES.get(PVAL_DSET, []):
+def detect_pval_col(header):
+    """Return (column_name, index, is_neglog) for p-value information."""
+    if PVAL_DSET in header:
+        return PVAL_DSET, header.index(PVAL_DSET), False
+    if NEG_LOG_PVAL_DSET in header:
+        return NEG_LOG_PVAL_DSET, header.index(NEG_LOG_PVAL_DSET), True
+    for candidate in COLUMN_ALIASES.get(PVAL_DSET, []):
         if candidate in header:
-            return header.index(candidate)
+            return candidate, header.index(candidate), False
     raise ValueError("P-value column not found")
 
 
 def check_required_columns(header):
     """Ensure all required columns are present after header normalisation."""
     missing = [c for c in REQUIRED_COLUMNS if c not in header]
+    has_p = PVAL_DSET in header
+    has_neglog = NEG_LOG_PVAL_DSET in header
     has_effect_size = any([c in header for c in EFFECT_SIZE_COLUMNS])
-    if missing or not has_effect_size:
+    if missing or not has_effect_size or not (has_p or has_neglog):
         messages = []
         if missing:
             messages.append(f"Missing required columns: {', '.join(missing)}.")
+        if not (has_p or has_neglog):
+            messages.append(
+                f"Either {PVAL_DSET} or {NEG_LOG_PVAL_DSET} must be present."
+            )
         if not has_effect_size:
             messages.append(
                 "Missing effect size column: one of "
@@ -133,9 +143,7 @@ def main():
     header_out = "\t".join(str(x) for x in canon_header) + "\n"
     # check if required columns were deteceted, otherwise exit
     check_required_columns(canon_header)
-    pval_idx = canon_header.index(PVAL_DSET)
-    print(pval_idx)
-    print(header_out)
+    pval_col, pval_idx, is_neglog = detect_pval_col(canon_header)
     # first pass: count total rows and collect significant indices
     sig_idx = []
     total = 0
@@ -144,11 +152,15 @@ def main():
         for i, line in enumerate(f):
             total += 1
             try:
-                pval = read_pval(line, pval_idx, delim)
+                val = read_pval(line, pval_idx, delim)
             except (IndexError, ValueError):
                 continue
-            if pval < 1e-5:
-                sig_idx.append(i)
+            if is_neglog:
+                if val > 5:
+                    sig_idx.append(i)
+            else:
+                if val < 1e-5:
+                    sig_idx.append(i)
 
     # if the total number of variants is less than or equal to the limit, copy the file directly
     if total <= limit:

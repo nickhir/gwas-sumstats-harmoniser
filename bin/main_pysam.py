@@ -8,6 +8,7 @@
 
 #######YUE################
 import pysam
+
 #######YUE################
 import sys
 import gzip
@@ -16,10 +17,12 @@ from collections import OrderedDict, Counter
 from lib.SumStatRecord import SumStatRecord
 from lib.VCFRecord import VCFRecord
 from gwas_sumstats_tools.interfaces.data_table import SumStatsTable
+import mpmath
+import math
+
 
 def main():
-    """ Implements main logic.
-    """
+    """Implements main logic."""
 
     # Get args
     global args
@@ -28,24 +31,28 @@ def main():
     header_written = False
     strand_counter = Counter()
     code_counter = Counter()
-   
+
     if args.hm_sumstats:
         out_handle = open_gzip(args.hm_sumstats, "wb")
         out_header = SumStatsTable(sumstats_file=args.sumstats)._set_header_order()
-        tag_neg_log_10_p_value=False
-        if "neg_log_10_p_value" in out_header:
-            out_header.remove("neg_log_10_p_value")
-            tag_neg_log_10_p_value=True
-    
+        has_p = "p_value" in out_header
+        has_neglog = "neg_log_10_p_value" in out_header
+        if not (has_p or has_neglog):
+            raise Exception("Input must contain p_value or neg_log_10_p_value")
+        tag_neg_log_10_p_value = has_neglog
+        if not has_p:
+            out_header.append("p_value")
+        if not has_neglog:
+            out_header.append("neg_log_10_p_value")
+
     #######YUE################
-    tbx=pysam.TabixFile(args.vcf)
+    tbx = pysam.TabixFile(args.vcf)
     #######YUE################
 
-    
-    
     # Process each row in summary statistics
-    for counter, ss_rec in enumerate(yield_sum_stat_records(args.sumstats,
-                                                            args.in_sep)):
+    for counter, ss_rec in enumerate(
+        yield_sum_stat_records(args.sumstats, args.in_sep)
+    ):
         # If set to only process 1 chrom, skip none matching chroms
         if args.only_chrom and not args.only_chrom == ss_rec.chrom:
             continue
@@ -54,7 +61,7 @@ def main():
         ret_code = ss_rec.validate_ssrec()
         if ret_code:
             ss_rec.hm_code = ret_code
-            strand_counter['Invalid variant for harmonisation'] += 1
+            strand_counter["Invalid variant for harmonisation"] += 1
 
         # # DEBUG print progress
         # if counter % 1000 == 0:
@@ -67,26 +74,18 @@ def main():
         # Skip rows that have code 14 (fail validation)
         if not ss_rec.hm_code:
             # Get VCF reference variants for this recordls
-            coordinate=args.coordinate
-            if int(coordinate[0])==0 and ss_rec.lifmethod=="lo":
-                if len(str(ss_rec.effect_al))+len(str(ss_rec.other_al))>2: 
-                    vcf_recs =get_vcf_records_0base(
-                        tbx,
-                        ss_rec.chrom,
-                        ss_rec.pos)
+            coordinate = args.coordinate
+            if int(coordinate[0]) == 0 and ss_rec.lifmethod == "lo":
+                if len(str(ss_rec.effect_al)) + len(str(ss_rec.other_al)) > 2:
+                    vcf_recs = get_vcf_records_0base(tbx, ss_rec.chrom, ss_rec.pos)
                 else:
-                    vcf_recs = get_vcf_records(
-                    tbx,
-                    ss_rec.chrom,
-                    ss_rec.pos)
+                    vcf_recs = get_vcf_records(tbx, ss_rec.chrom, ss_rec.pos)
             else:
-                vcf_recs = get_vcf_records(
-                    tbx,
-                    ss_rec.chrom,
-                    ss_rec.pos)
+                vcf_recs = get_vcf_records(tbx, ss_rec.chrom, ss_rec.pos)
             # Extract the VCF record that matches the summary stat record
             vcf_rec, ret_code = exract_matching_record_from_vcf_records(
-                ss_rec, vcf_recs)
+                ss_rec, vcf_recs
+            )
 
             # Set return code when vcf_rec was not found
             if ret_code:
@@ -112,39 +111,39 @@ def main():
 
         # Skip if harmonisation code exists (no VCF record exists or code 14)
         if ss_rec.hm_code:
-            strand_counter['No VCF record found'] += 1
+            strand_counter["No VCF record found"] += 1
 
         # Harmonise palindromic alleles
         elif is_palindromic(ss_rec.other_al, ss_rec.effect_al):
 
-            strand_counter['Palindromic variant'] += 1
+            strand_counter["Palindromic variant"] += 1
             if args.hm_sumstats:
                 ss_rec = harmonise_palindromic(ss_rec, vcf_rec)
 
         # Harmonise opposite strand alleles
-        elif compatible_alleles_reverse_strand(ss_rec.other_al,
-                                               ss_rec.effect_al,
-                                               vcf_rec.ref_al,
-                                               vcf_alt):
+        elif compatible_alleles_reverse_strand(
+            ss_rec.other_al, ss_rec.effect_al, vcf_rec.ref_al, vcf_alt
+        ):
 
-            strand_counter['Reverse strand variant'] += 1
+            strand_counter["Reverse strand variant"] += 1
             if args.hm_sumstats:
                 ss_rec = harmonise_reverse_strand(ss_rec, vcf_rec)
 
         # Harmonise same forward alleles
-        elif compatible_alleles_forward_strand(ss_rec.other_al,
-                                               ss_rec.effect_al,
-                                               vcf_rec.ref_al,
-                                               vcf_alt):
+        elif compatible_alleles_forward_strand(
+            ss_rec.other_al, ss_rec.effect_al, vcf_rec.ref_al, vcf_alt
+        ):
 
-            strand_counter['Forward strand variant'] += 1
+            strand_counter["Forward strand variant"] += 1
             if args.hm_sumstats:
                 ss_rec = harmonise_forward_strand(ss_rec, vcf_rec)
 
         # Should never reach this 'else' statement
         else:
-            sys.exit("Error: Alleles were not palindromic, opposite strand, or "
-                     "same strand!")
+            sys.exit(
+                "Error: Alleles were not palindromic, opposite strand, or "
+                "same strand!"
+            )
 
         # Add harmonisation code to counter
         code_counter[ss_rec.hm_code] += 1
@@ -154,39 +153,125 @@ def main():
         #
         if args.hm_sumstats:
             out_raw = OrderedDict()
-            out_raw["chromosome"] = ss_rec.hm_chrom if vcf_rec and ss_rec.is_harmonised else args.na_rep_out
-            out_raw["base_pair_location"] = ss_rec.hm_pos if vcf_rec and ss_rec.is_harmonised else args.na_rep_out
-            out_raw["effect_allele"] = ss_rec.hm_effect_al.str() if vcf_rec and ss_rec.is_harmonised else args.na_rep_out
-            out_raw["other_allele"] = ss_rec.hm_other_al.str() if vcf_rec and ss_rec.is_harmonised else args.na_rep_out
-            out_raw["beta"] = ss_rec.beta if ss_rec.beta is not None and ss_rec.is_harmonised else args.na_rep_out
-            out_raw["odds_ratio"] = ss_rec.oddsr if ss_rec.oddsr is not None and ss_rec.is_harmonised else args.na_rep_out
-            out_raw["z_score"] = ss_rec.zscore if ss_rec.zscore is not None and ss_rec.is_harmonised else args.na_rep_out
-            out_raw["ci_lower"] = ss_rec.oddsr_lower if ss_rec.oddsr_lower is not None and ss_rec.is_harmonised else args.na_rep_out
-            out_raw["ci_upper"] = ss_rec.oddsr_upper if ss_rec.oddsr_upper is not None and ss_rec.is_harmonised else args.na_rep_out
-            out_raw["effect_allele_frequency"] = ss_rec.eaf if ss_rec.eaf is not None and ss_rec.is_harmonised else args.na_rep_out
-            # Process the neg_log_10_p_value
-            if tag_neg_log_10_p_value == True:
-                out_raw["p_value"] = 10**(float(ss_rec.data["neg_log_10_p_value"])*(-1)) if ss_rec.data["neg_log_10_p_value"] is not None else args.na_rep_out
+            out_raw["chromosome"] = (
+                ss_rec.hm_chrom if vcf_rec and ss_rec.is_harmonised else args.na_rep_out
+            )
+            out_raw["base_pair_location"] = (
+                ss_rec.hm_pos if vcf_rec and ss_rec.is_harmonised else args.na_rep_out
+            )
+            out_raw["effect_allele"] = (
+                ss_rec.hm_effect_al.str()
+                if vcf_rec and ss_rec.is_harmonised
+                else args.na_rep_out
+            )
+            out_raw["other_allele"] = (
+                ss_rec.hm_other_al.str()
+                if vcf_rec and ss_rec.is_harmonised
+                else args.na_rep_out
+            )
+            out_raw["beta"] = (
+                ss_rec.beta
+                if ss_rec.beta is not None and ss_rec.is_harmonised
+                else args.na_rep_out
+            )
+            out_raw["odds_ratio"] = (
+                ss_rec.oddsr
+                if ss_rec.oddsr is not None and ss_rec.is_harmonised
+                else args.na_rep_out
+            )
+            out_raw["z_score"] = (
+                ss_rec.zscore
+                if ss_rec.zscore is not None and ss_rec.is_harmonised
+                else args.na_rep_out
+            )
+            out_raw["ci_lower"] = (
+                ss_rec.oddsr_lower
+                if ss_rec.oddsr_lower is not None and ss_rec.is_harmonised
+                else args.na_rep_out
+            )
+            out_raw["ci_upper"] = (
+                ss_rec.oddsr_upper
+                if ss_rec.oddsr_upper is not None and ss_rec.is_harmonised
+                else args.na_rep_out
+            )
+            out_raw["effect_allele_frequency"] = (
+                ss_rec.eaf
+                if ss_rec.eaf is not None and ss_rec.is_harmonised
+                else args.na_rep_out
+            )
+            # Process p_value and neg_log_10_p_value
+            if tag_neg_log_10_p_value:
+                if ss_rec.data["neg_log_10_p_value"] is not None:
+                    nlog = float(ss_rec.data["neg_log_10_p_value"])
+                    out_raw["neg_log_10_p_value"] = ss_rec.data["neg_log_10_p_value"]
+                    if nlog >= 300:
+                        mpmath.mp.dps = max(50, int(nlog) + 5)
+                        out_raw["p_value"] = str(mpmath.mpf(f"1e-{int(nlog)}"))
+                    else:
+                        out_raw["p_value"] = 10 ** (-nlog)
+                else:
+                    out_raw["p_value"] = args.na_rep_out
+                    out_raw["neg_log_10_p_value"] = args.na_rep_out
             else:
-                out_raw["p_value"]=ss_rec.data["p_value"] if ss_rec.data["p_value"] is not None else args.na_rep_out
+                p_str = ss_rec.data["p_value"]
+                out_raw["p_value"] = p_str if p_str is not None else args.na_rep_out
+                if p_str is not None:
+                    try:
+                        p_float = float(p_str)
+                        if p_float == 0.0:
+                            nlog = -mpmath.log10(mpmath.mpf(p_str))
+                        else:
+                            nlog = -math.log10(p_float)
+                        out_raw["neg_log_10_p_value"] = str(nlog)
+                    except (ValueError, TypeError):
+                        out_raw["neg_log_10_p_value"] = args.na_rep_out
+                else:
+                    out_raw["neg_log_10_p_value"] = args.na_rep_out
             out_raw["hm_code"] = ss_rec.hm_code
-            out_raw["hm_coordinate_conversion"] = ss_rec.data["hm_coordinate_conversion"]
-            out_raw["variant_id"] = vcf_rec.hgvs()[0] if vcf_rec and ss_rec.is_harmonised else args.na_rep_out
-            out_raw["rsid"] = ss_rec.hm_rsid if vcf_rec and ss_rec.is_harmonised else args.na_rep_out
+            out_raw["hm_coordinate_conversion"] = ss_rec.data[
+                "hm_coordinate_conversion"
+            ]
+            out_raw["variant_id"] = (
+                vcf_rec.hgvs()[0]
+                if vcf_rec and ss_rec.is_harmonised
+                else args.na_rep_out
+            )
+            out_raw["rsid"] = (
+                ss_rec.hm_rsid if vcf_rec and ss_rec.is_harmonised else args.na_rep_out
+            )
             try:
-                out_raw["standard_error"]=ss_rec.data["standard_error"] if ss_rec.data["standard_error"] is not None else args.na_rep_out
+                out_raw["standard_error"] = (
+                    ss_rec.data["standard_error"]
+                    if ss_rec.data["standard_error"] is not None
+                    else args.na_rep_out
+                )
             except:
-                out_raw["standard_error"]=args.na_rep_out
+                out_raw["standard_error"] = args.na_rep_out
             # Add other data from summary stat file
-            outed=["chromosome","base_pair_location","p_value","effect_allele","other_allele","effect_allele_frequency","beta","odds_ratio","rsid","standard_error","ci_upper","ci_lower","hm_coordinate_conversion","z_score"]
+            outed = [
+                "chromosome",
+                "base_pair_location",
+                "p_value",
+                "effect_allele",
+                "other_allele",
+                "effect_allele_frequency",
+                "beta",
+                "odds_ratio",
+                "rsid",
+                "standard_error",
+                "ci_upper",
+                "ci_lower",
+                "hm_coordinate_conversion",
+                "z_score",
+            ]
             for key in ss_rec.data:
                 if key not in outed:
                     value = ss_rec.data[key] if ss_rec.data[key] else args.na_rep_out
                     out_raw[key] = str(value)
 
-            generated_new_header=["hm_code","variant_id","rsid"]
-            add_header=[x for x in generated_new_header if x not in out_header]
-            new_order=out_header+add_header
+            generated_new_header = ["hm_code", "variant_id", "rsid"]
+            add_header = [x for x in generated_new_header if x not in out_header]
+            new_order = out_header + add_header
             out_row = OrderedDict((k, out_raw[k]) for k in new_order)
 
             # Write header
@@ -198,7 +283,6 @@ def main():
             # Write row
             outline = args.out_sep.join([str(x) for x in out_row.values()]) + "\n"
             out_handle.write(outline.encode("utf-8"))
-            
 
     # Close output handle
     if args.hm_sumstats:
@@ -206,137 +290,233 @@ def main():
 
     # Write strand_count stats to file
     if args.strand_counts:
-        with open_gzip(args.strand_counts, rw='wb') as out_h:
+        with open_gzip(args.strand_counts, rw="wb") as out_h:
             for key in sorted(strand_counter.keys()):
-                out_h.write('{0}\t{1}\n'.format(key, strand_counter[key]).encode('utf-8'))
+                out_h.write(
+                    "{0}\t{1}\n".format(key, strand_counter[key]).encode("utf-8")
+                )
 
     # Write outcome code stats to file
     code_table = {
-        1:  'Palindromic; Infer strand; Forward strand; Correct orientation; Already harmonised',
-        2:  'Palindromic; Infer strand; Forward strand; Flipped orientation; Requires harmonisation',
-        3:  'Palindromic; Infer strand; Reverse strand; Correct orientation; Already harmonised',
-        4:  'Palindromic; Infer strand; Reverse strand; Flipped orientation; Requires harmonisation',
-        5:  'Palindromic; Assume forward strand; Correct orientation; Already harmonised',
-        6:  'Palindromic; Assume forward strand; Flipped orientation; Requires harmonisation',
-        7:  'Palindromic; Assume reverse strand; Correct orientation; Already harmonised',
-        8:  'Palindromic; Assume reverse strand; Flipped orientation; Requires harmonisation',
-        9:  'Palindromic; Drop palindromic; Will not harmonise',
-        10: 'Forward strand; Correct orientation; Already harmonised',
-        11: 'Forward strand; Flipped orientation; Requires harmonisation',
-        12: 'Reverse strand; Correct orientation; Already harmonised',
-        13: 'Reverse strand; Flipped orientation; Requires harmonisation',
-        14: 'Required fields are not known; Cannot harmonise',
-        15: 'No matching variants in reference VCF; Cannot harmonise',
-        16: 'Multiple matching variants in reference VCF (ambiguous); Cannot harmonise',
-        17: 'Palindromic; Infer strand; EAF or reference VCF AF not known; Cannot harmonise',
-        18: 'Palindromic; Infer strand; EAF < --maf_palin_threshold; Will not harmonise' }
+        1: "Palindromic; Infer strand; Forward strand; Correct orientation; Already harmonised",
+        2: "Palindromic; Infer strand; Forward strand; Flipped orientation; Requires harmonisation",
+        3: "Palindromic; Infer strand; Reverse strand; Correct orientation; Already harmonised",
+        4: "Palindromic; Infer strand; Reverse strand; Flipped orientation; Requires harmonisation",
+        5: "Palindromic; Assume forward strand; Correct orientation; Already harmonised",
+        6: "Palindromic; Assume forward strand; Flipped orientation; Requires harmonisation",
+        7: "Palindromic; Assume reverse strand; Correct orientation; Already harmonised",
+        8: "Palindromic; Assume reverse strand; Flipped orientation; Requires harmonisation",
+        9: "Palindromic; Drop palindromic; Will not harmonise",
+        10: "Forward strand; Correct orientation; Already harmonised",
+        11: "Forward strand; Flipped orientation; Requires harmonisation",
+        12: "Reverse strand; Correct orientation; Already harmonised",
+        13: "Reverse strand; Flipped orientation; Requires harmonisation",
+        14: "Required fields are not known; Cannot harmonise",
+        15: "No matching variants in reference VCF; Cannot harmonise",
+        16: "Multiple matching variants in reference VCF (ambiguous); Cannot harmonise",
+        17: "Palindromic; Infer strand; EAF or reference VCF AF not known; Cannot harmonise",
+        18: "Palindromic; Infer strand; EAF < --maf_palin_threshold; Will not harmonise",
+    }
     if args.hm_statfile:
-        with open_gzip(args.hm_statfile, 'wb') as out_h:
-            out_h.write('hm_code\tcount\tdescription\n'.encode('utf-8'))
+        with open_gzip(args.hm_statfile, "wb") as out_h:
+            out_h.write("hm_code\tcount\tdescription\n".encode("utf-8"))
             for key in sorted(code_counter.keys()):
-                out_h.write('{0}\t{1}\t{2}\n'.format(key,
-                                                     code_counter[key],
-                                                     code_table[key]).encode('utf-8') )
-   
+                out_h.write(
+                    "{0}\t{1}\t{2}\n".format(
+                        key, code_counter[key], code_table[key]
+                    ).encode("utf-8")
+                )
+
     return 0
 
 
 def parse_args():
-    """ Parse command line args using argparse.
-    """
+    """Parse command line args using argparse."""
     parser = argparse.ArgumentParser(description="Summary statistc harmoniser")
 
     # Input file args
-    infile_group = parser.add_argument_group(title='Input files')
-    infile_group.add_argument('--sumstats', metavar="<file>",
-                        help=('GWAS summary statistics file'), type=str,
-                        required=True)
-    infile_group.add_argument('--vcf', metavar="<file>",
-                        help=('Reference VCF file. Use # as chromosome wildcard.'), type=str, required=True)
+    infile_group = parser.add_argument_group(title="Input files")
+    infile_group.add_argument(
+        "--sumstats",
+        metavar="<file>",
+        help=("GWAS summary statistics file"),
+        type=str,
+        required=True,
+    )
+    infile_group.add_argument(
+        "--vcf",
+        metavar="<file>",
+        help=("Reference VCF file. Use # as chromosome wildcard."),
+        type=str,
+        required=True,
+    )
 
     # Output file args
-    outfile_group = parser.add_argument_group(title='Output files')
-    outfile_group.add_argument('--hm_sumstats', metavar="<file>",
-        help=("Harmonised sumstat output file (use 'gz' extension to gzip)"), type=str)
-    outfile_group.add_argument('--hm_statfile', metavar="<file>",
-        help=("Statistics from harmonisation process output file. Should only be used in conjunction with --hm_sumstats."), type=str)
-    outfile_group.add_argument('--strand_counts', metavar="<file>",
-        help=("Output file showing number of variants that are forward/reverse/palindromic"), type=str)
+    outfile_group = parser.add_argument_group(title="Output files")
+    outfile_group.add_argument(
+        "--hm_sumstats",
+        metavar="<file>",
+        help=("Harmonised sumstat output file (use 'gz' extension to gzip)"),
+        type=str,
+    )
+    outfile_group.add_argument(
+        "--hm_statfile",
+        metavar="<file>",
+        help=(
+            "Statistics from harmonisation process output file. Should only be used in conjunction with --hm_sumstats."
+        ),
+        type=str,
+    )
+    outfile_group.add_argument(
+        "--strand_counts",
+        metavar="<file>",
+        help=(
+            "Output file showing number of variants that are forward/reverse/palindromic"
+        ),
+        type=str,
+    )
 
-    # Harmonisation mode
-    mode_group = parser.add_argument_group(title='Harmonisation mode')
-    mode_group.add_argument('--coordinate',
-                            help=('coordinate system of the input file:\n'
-                                  '(a) 1_base '
-                                  '(b) 0_base '),
-                            nargs='?',
-                            type=str,
-                            default="1-based")
-    mode_group.add_argument('--palin_mode', metavar="[infer|forward|reverse|drop]",
-                        help=('Mode to use for palindromic variants:\n'
-                              '(a) infer strand from effect-allele freq, '
-                              '(b) assume forward strand, '
-                              '(c) assume reverse strand, '
-                              '(d) drop palindromic variants'),
-                        choices=['infer', 'forward', 'reverse', 'drop'],
-                        type=str)
+    # Harmonisation mode
+    mode_group = parser.add_argument_group(title="Harmonisation mode")
+    mode_group.add_argument(
+        "--coordinate",
+        help=("coordinate system of the input file:\n" "(a) 1_base " "(b) 0_base "),
+        nargs="?",
+        type=str,
+        default="1-based",
+    )
+    mode_group.add_argument(
+        "--palin_mode",
+        metavar="[infer|forward|reverse|drop]",
+        help=(
+            "Mode to use for palindromic variants:\n"
+            "(a) infer strand from effect-allele freq, "
+            "(b) assume forward strand, "
+            "(c) assume reverse strand, "
+            "(d) drop palindromic variants"
+        ),
+        choices=["infer", "forward", "reverse", "drop"],
+        type=str,
+    )
 
     # Infer strand specific options
-    infer_group = parser.add_argument_group(title='Strand inference options',
-        description='Options that are specific to strand inference (--palin_mode infer)')
-    infer_group.add_argument('--af_vcf_field', metavar="<str>",
-                        help=('VCF info field containing alt allele freq (default: AF_NFE)'),
-                        type=str, default="AF_NFE")
-    infer_group.add_argument('--infer_maf_threshold', metavar="<float>",
-                        help=('Max MAF that will be used to infer palindrome strand (default: 0.42)'),
-                        type=float, default=0.42)
+    infer_group = parser.add_argument_group(
+        title="Strand inference options",
+        description="Options that are specific to strand inference (--palin_mode infer)",
+    )
+    infer_group.add_argument(
+        "--af_vcf_field",
+        metavar="<str>",
+        help=("VCF info field containing alt allele freq (default: AF_NFE)"),
+        type=str,
+        default="AF_NFE",
+    )
+    infer_group.add_argument(
+        "--infer_maf_threshold",
+        metavar="<float>",
+        help=("Max MAF that will be used to infer palindrome strand (default: 0.42)"),
+        type=float,
+        default=0.42,
+    )
 
     # Global column args
-    incols_group = parser.add_argument_group(title='Input column names')
-    incols_group.add_argument('--chrom_col', metavar="<str>",
-                        help=('Chromosome column'), type=str, required=True)
-    incols_group.add_argument('--pos_col', metavar="<str>",
-                        help=('Position column'), type=str, required=True)
-    incols_group.add_argument('--effAl_col', metavar="<str>",
-                        help=('Effect allele column'), type=str, required=True)
-    incols_group.add_argument('--otherAl_col', metavar="<str>",
-                        help=('Other allele column'), type=str, required=True)
-    incols_group.add_argument('--beta_col', metavar="<str>",
-                        help=('beta column'), type=str)
-    incols_group.add_argument('--zscore_col', metavar="<str>",
-                        help=('Z-score column'), type=str)
-    incols_group.add_argument('--or_col', metavar="<str>",
-                        help=('Odds ratio column'), type=str)
-    incols_group.add_argument('--or_col_lower', metavar="<str>",
-                        help=('Odds ratio lower CI column'), type=str)
-    incols_group.add_argument('--or_col_upper', metavar="<str>",
-                        help=('Odds ratio upper CI column'), type=str)
-    incols_group.add_argument('--eaf_col', metavar="<str>",
-                        help=('Effect allele frequency column'), type=str)
-    incols_group.add_argument('--rsid_col', metavar="<str>",
-                        help=('rsID column in the summary stat file'), type=str)
-    incols_group.add_argument('--hm_coordinate_conversion', metavar="<str>",
-                        help=('liftover method column'), type=str, required=True)
+    incols_group = parser.add_argument_group(title="Input column names")
+    incols_group.add_argument(
+        "--chrom_col",
+        metavar="<str>",
+        help=("Chromosome column"),
+        type=str,
+        required=True,
+    )
+    incols_group.add_argument(
+        "--pos_col", metavar="<str>", help=("Position column"), type=str, required=True
+    )
+    incols_group.add_argument(
+        "--effAl_col",
+        metavar="<str>",
+        help=("Effect allele column"),
+        type=str,
+        required=True,
+    )
+    incols_group.add_argument(
+        "--otherAl_col",
+        metavar="<str>",
+        help=("Other allele column"),
+        type=str,
+        required=True,
+    )
+    incols_group.add_argument(
+        "--beta_col", metavar="<str>", help=("beta column"), type=str
+    )
+    incols_group.add_argument(
+        "--zscore_col", metavar="<str>", help=("Z-score column"), type=str
+    )
+    incols_group.add_argument(
+        "--or_col", metavar="<str>", help=("Odds ratio column"), type=str
+    )
+    incols_group.add_argument(
+        "--or_col_lower", metavar="<str>", help=("Odds ratio lower CI column"), type=str
+    )
+    incols_group.add_argument(
+        "--or_col_upper", metavar="<str>", help=("Odds ratio upper CI column"), type=str
+    )
+    incols_group.add_argument(
+        "--eaf_col", metavar="<str>", help=("Effect allele frequency column"), type=str
+    )
+    incols_group.add_argument(
+        "--rsid_col",
+        metavar="<str>",
+        help=("rsID column in the summary stat file"),
+        type=str,
+    )
+    incols_group.add_argument(
+        "--hm_coordinate_conversion",
+        metavar="<str>",
+        help=("liftover method column"),
+        type=str,
+        required=True,
+    )
 
     # Global other args
-    other_group = parser.add_argument_group(title='Other args')
-    other_group.add_argument('--only_chrom', metavar="<str>",
-                        help=('Only process this chromosome'), type=str)
-    other_group.add_argument('--in_sep', metavar="<str>",
-                        help=('Input file column separator [tab|space|comma|other] (default: tab)'),
-                        type=str, default='tab')
-    other_group.add_argument('--out_sep', metavar="<str>",
-                        help=('Output file column separator [tab|space|comma|other] (default: tab)'),
-                        type=str, default='tab')
-    other_group.add_argument('--na_rep_in', metavar="<str>",
-                        help=('How NA  are represented in the input file (default: "")'),
-                        type=str, default="")
-    other_group.add_argument('--na_rep_out', metavar="<str>",
-                        help=('How to represent NA values in output (default: "")'),
-                        type=str, default="")
-    other_group.add_argument('--chrom_map', metavar="<str>",
-                        help=('Map summary stat chromosome names, e.g. `--chrom_map 23=X 24=Y`'),
-                        type=str, nargs='+')
+    other_group = parser.add_argument_group(title="Other args")
+    other_group.add_argument(
+        "--only_chrom", metavar="<str>", help=("Only process this chromosome"), type=str
+    )
+    other_group.add_argument(
+        "--in_sep",
+        metavar="<str>",
+        help=("Input file column separator [tab|space|comma|other] (default: tab)"),
+        type=str,
+        default="tab",
+    )
+    other_group.add_argument(
+        "--out_sep",
+        metavar="<str>",
+        help=("Output file column separator [tab|space|comma|other] (default: tab)"),
+        type=str,
+        default="tab",
+    )
+    other_group.add_argument(
+        "--na_rep_in",
+        metavar="<str>",
+        help=('How NA  are represented in the input file (default: "")'),
+        type=str,
+        default="",
+    )
+    other_group.add_argument(
+        "--na_rep_out",
+        metavar="<str>",
+        help=('How to represent NA values in output (default: "")'),
+        type=str,
+        default="",
+    )
+    other_group.add_argument(
+        "--chrom_map",
+        metavar="<str>",
+        help=("Map summary stat chromosome names, e.g. `--chrom_map 23=X 24=Y`"),
+        type=str,
+        nargs="+",
+    )
 
     # Parse arguments
     args = parser.parse_args()
@@ -346,54 +526,61 @@ def parse_args():
     args.out_sep = convert_arg_separator(args.out_sep)
 
     # Assert that at least one of --hm_sumstats, --strand_counts is selected
-    assert any([args.hm_sumstats, args.strand_counts]), \
-        "Error: at least 1 of --hm_sumstats, --strand_counts must be selected"
+    assert any(
+        [args.hm_sumstats, args.strand_counts]
+    ), "Error: at least 1 of --hm_sumstats, --strand_counts must be selected"
 
     # Assert that --hm_statfile is only ever used in conjunction with --hm_sumstats
     if args.hm_statfile:
-        assert args.hm_sumstats, \
-        "Error: --hm_statfile must only be used in conjunction with --hm_sumstats"
+        assert (
+            args.hm_sumstats
+        ), "Error: --hm_statfile must only be used in conjunction with --hm_sumstats"
 
     # Assert that mode is selected if doing harmonisation
     if args.hm_sumstats:
-        assert args.palin_mode, \
-        "Error: '--palin_mode' must be used with '--hm_sumstats'"
+        assert (
+            args.palin_mode
+        ), "Error: '--palin_mode' must be used with '--hm_sumstats'"
 
     # Assert that inference specific options are supplied
-    if args.palin_mode == 'infer':
-        assert all([args.af_vcf_field, args.infer_maf_threshold, args.eaf_col]), \
-            "Error: '--af_vcf_field', '--infer_maf_threshold' and '--eaf_col' must be used with '--palin_mode infer'"
+    if args.palin_mode == "infer":
+        assert all(
+            [args.af_vcf_field, args.infer_maf_threshold, args.eaf_col]
+        ), "Error: '--af_vcf_field', '--infer_maf_threshold' and '--eaf_col' must be used with '--palin_mode infer'"
 
     # Assert that OR_lower and OR_upper are used both present if any
     if any([args.or_col_lower, args.or_col_upper]):
-        assert all([args.or_col_lower, args.or_col_upper]), \
-        "Error: '--or_col_lower' and '--or_col_upper' must be used together"
+        assert all(
+            [args.or_col_lower, args.or_col_upper]
+        ), "Error: '--or_col_lower' and '--or_col_upper' must be used together"
 
     # Parse chrom_map
     if args.chrom_map:
         try:
-            chrom_map_d = dict([pair.split('=') for pair in args.chrom_map])
+            chrom_map_d = dict([pair.split("=") for pair in args.chrom_map])
             args.chrom_map = chrom_map_d
         except ValueError:
-            assert False, \
-            'Error: --chrom_map must be in the format `--chrom_map 23=X 24=Y`'
+            assert (
+                False
+            ), "Error: --chrom_map must be in the format `--chrom_map 23=X 24=Y`"
 
     return args
 
+
 def convert_arg_separator(s):
-    ''' Converts [tab|space|comma|other] to a variable
-    '''
-    if s == 'tab':
-        return '\t'
-    elif s == 'space':
-        return ' '
-    elif s == 'comma':
-        return ','
+    """Converts [tab|space|comma|other] to a variable"""
+    if s == "tab":
+        return "\t"
+    elif s == "space":
+        return " "
+    elif s == "comma":
+        return ","
     else:
         return s
 
+
 def exract_matching_record_from_vcf_records(ss_rec, vcf_recs):
-    ''' Extracts the vcf record that matches the summary stat record.
+    """Extracts the vcf record that matches the summary stat record.
     Args:
         ss_rec (SumStatRecord): object containing summary statistic record
         vcf_recs (list of VCFRecords): list containing vcf records
@@ -402,7 +589,7 @@ def exract_matching_record_from_vcf_records(ss_rec, vcf_recs):
             a single VCFRecord or None,
             output code
             )
-    '''
+    """
 
     # Discard if there are no records
     if len(vcf_recs) == 0:
@@ -438,17 +625,18 @@ def exract_matching_record_from_vcf_records(ss_rec, vcf_recs):
 
     return (vcf_rec, None)
 
+
 def harmonise_palindromic(ss_rec, vcf_rec):
-    ''' Harmonises palindromic variant
+    """Harmonises palindromic variant
     Args:
         ss_rec (SumStatRecord): object containing summary statistic record
         vcf_rec (VCFRecord): matching vcf record
     Returns:
         harmonised ss_rec
-    '''
+    """
 
     # Mode: Infer strand mode
-    if args.palin_mode == 'infer':
+    if args.palin_mode == "infer":
 
         # Extract allele frequency if argument is provided
         if args.af_vcf_field and args.af_vcf_field in vcf_rec.info:
@@ -459,8 +647,10 @@ def harmonise_palindromic(ss_rec, vcf_rec):
 
         # Discard if either MAF is greater than threshold
         if ss_rec.eaf:
-            if ( af_to_maf(ss_rec.eaf) > args.infer_maf_threshold or
-                af_to_maf(vcf_alt_af) > args.infer_maf_threshold ):
+            if (
+                af_to_maf(ss_rec.eaf) > args.infer_maf_threshold
+                or af_to_maf(vcf_alt_af) > args.infer_maf_threshold
+            ):
                 ss_rec.hm_code = 18
                 return ss_rec
         else:
@@ -500,7 +690,7 @@ def harmonise_palindromic(ss_rec, vcf_rec):
                 return ss_rec
 
     # Mode: Assume palindromic variants are on the forward strand
-    elif args.palin_mode == 'forward':
+    elif args.palin_mode == "forward":
 
         # If alleles flipped orientation
         if ss_rec.effect_al.str() == vcf_rec.ref_al.str():
@@ -515,7 +705,7 @@ def harmonise_palindromic(ss_rec, vcf_rec):
             return ss_rec
 
     # Mode: Assume palindromic variants are on the reverse strand
-    elif args.palin_mode == 'reverse':
+    elif args.palin_mode == "reverse":
 
         # Take reverse complement of ssrec alleles
         ss_rec.revcomp_alleles()
@@ -532,18 +722,19 @@ def harmonise_palindromic(ss_rec, vcf_rec):
             return ss_rec
 
     # Mode: Drop palindromic variants
-    elif args.palin_mode == 'drop':
+    elif args.palin_mode == "drop":
         ss_rec.hm_code = 9
         return ss_rec
 
+
 def harmonise_reverse_strand(ss_rec, vcf_rec):
-    ''' Harmonises reverse strand variant
+    """Harmonises reverse strand variant
     Args:
         ss_rec (SumStatRecord): object containing summary statistic record
         vcf_rec (VCFRecord): matching vcf record
     Returns:
         harmonised ss_rec
-    '''
+    """
     # Take reverse complement of ssrec alleles
     ss_rec.revcomp_alleles()
     # If alleles flipped orientation
@@ -558,14 +749,15 @@ def harmonise_reverse_strand(ss_rec, vcf_rec):
         ss_rec.hm_code = 12
         return ss_rec
 
+
 def harmonise_forward_strand(ss_rec, vcf_rec):
-    ''' Harmonises forward strand variant
+    """Harmonises forward strand variant
     Args:
         ss_rec (SumStatRecord): object containing summary statistic record
         vcf_rec (VCFRecord): matching vcf record
     Returns:
         harmonised ss_rec
-    '''
+    """
     # If alleles flipped orientation
     if ss_rec.effect_al.str() == vcf_rec.ref_al.str():
         ss_rec.flip_beta()
@@ -578,8 +770,9 @@ def harmonise_forward_strand(ss_rec, vcf_rec):
         ss_rec.hm_code = 10
         return ss_rec
 
+
 def afs_concordant(af1, af2):
-    """ Checks whether the allele frequencies of two palindromic variants are
+    """Checks whether the allele frequencies of two palindromic variants are
         concordant. Concordant if both are either >0.5 or both are <0.5.
     Args:
         af1, af2 (float): Allele frequencies from two datasets
@@ -592,15 +785,17 @@ def afs_concordant(af1, af2):
     else:
         return False
 
+
 def is_palindromic(A1, A2):
-    """ Checks if two alleles are palindromic.
+    """Checks if two alleles are palindromic.
     Args:
         A1, A2 (Seq): Alleles (i.e. other and effect alleles)
     """
     return A1.str() == A2.revcomp().str()
 
+
 def find_non_matching_alleles(sumstat_rec, vcf_rec):
-    """ For each vcfrec ref-alt pair check whether it matches either the
+    """For each vcfrec ref-alt pair check whether it matches either the
         forward or reverse complement of the sumstat alleles.
     Args:
         sumstat_rec (SumStatRecord)
@@ -610,15 +805,15 @@ def find_non_matching_alleles(sumstat_rec, vcf_rec):
     """
     alts_to_remove = []
     for ref, alt in vcf_rec.yeild_alleles():
-        if not compatible_alleles_either_strand(sumstat_rec.other_al,
-                                                sumstat_rec.effect_al,
-                                                ref,
-                                                alt):
+        if not compatible_alleles_either_strand(
+            sumstat_rec.other_al, sumstat_rec.effect_al, ref, alt
+        ):
             alts_to_remove.append(alt)
     return alts_to_remove
 
+
 def compatible_alleles_either_strand(A1, A2, B1, B2):
-    """ Checks whether alleles are compatible, either on the forward or reverse
+    """Checks whether alleles are compatible, either on the forward or reverse
         strand
     Args:
         A1, A2 (Seq): Alleles from one source
@@ -626,11 +821,13 @@ def compatible_alleles_either_strand(A1, A2, B1, B2):
     Returns:
         Boolean
     """
-    return (compatible_alleles_forward_strand(A1, A2, B1, B2) or
-            compatible_alleles_reverse_strand(A1, A2, B1, B2))
+    return compatible_alleles_forward_strand(
+        A1, A2, B1, B2
+    ) or compatible_alleles_reverse_strand(A1, A2, B1, B2)
+
 
 def compatible_alleles_forward_strand(A1, A2, B1, B2):
-    """ Checks whether alleles are compatible on the forward strand
+    """Checks whether alleles are compatible on the forward strand
     Args:
         A1, A2 (Seq): Alleles from one source
         B1, B2 (Seq): Alleles from another source
@@ -639,8 +836,9 @@ def compatible_alleles_forward_strand(A1, A2, B1, B2):
     """
     return set([A1.str(), A2.str()]) == set([B1.str(), B2.str()])
 
+
 def compatible_alleles_reverse_strand(A1, A2, B1, B2):
-    """ Checks whether alleles are compatible on the forward strand
+    """Checks whether alleles are compatible on the forward strand
     Args:
         A1, A2 (Seq): Alleles from one source
         B1, B2 (Seq): Alleles from another source
@@ -649,8 +847,9 @@ def compatible_alleles_reverse_strand(A1, A2, B1, B2):
     """
     return set([A1.str(), A2.str()]) == set([B1.revcomp().str(), B2.revcomp().str()])
 
+
 def af_to_maf(af):
-    """ Converts an allele frequency to a minor allele frequency
+    """Converts an allele frequency to a minor allele frequency
     Args:
         af (float or str)
     Returns:
@@ -667,8 +866,9 @@ def af_to_maf(af):
     else:
         return 1 - af
 
+
 def get_vcf_records(tbx, chrom, pos):
-    """ Uses tabix to query VCF file. Parses info from record.
+    """Uses tabix to query VCF file. Parses info from record.
     Args:
         in_vcf (str): vcf file
         chrom (str): chromosome
@@ -677,14 +877,15 @@ def get_vcf_records(tbx, chrom, pos):
         list of VCFRecords
     """
     #######YUE################
-    result=tbx.fetch(chrom, int(pos)-1, int(pos))
+    result = tbx.fetch(chrom, int(pos) - 1, int(pos))
     # each records returned by fetch is str, it needs to be change into list for VCF records to process
-    response=[list(n.split("\t")) for n in result]
+    response = [list(n.split("\t")) for n in result]
     #######YUE################
     return [VCFRecord(line) for line in response]
+
 
 def get_vcf_records_0base(tbx, chrom, pos):
-    """ Uses tabix to query VCF file. Parses info from record.
+    """Uses tabix to query VCF file. Parses info from record.
     Args:
         in_vcf (str): vcf file
         chrom (str): chromosome
@@ -693,14 +894,15 @@ def get_vcf_records_0base(tbx, chrom, pos):
         list of VCFRecords
     """
     #######YUE################
-    result=tbx.fetch(chrom, int(pos)-2, int(pos))
+    result = tbx.fetch(chrom, int(pos) - 2, int(pos))
     # each records returned by fetch is str, it needs to be change into list for VCF records to process
-    response=[list(n.split("\t")) for n in result]
+    response = [list(n.split("\t")) for n in result]
     #######YUE################
     return [VCFRecord(line) for line in response]
 
+
 def yield_sum_stat_records(inf, sep):
-    """ Load lines from summary stat file and convert to SumStatRecord class.
+    """Load lines from summary stat file and convert to SumStatRecord class.
     Args:
         inf (str): input file
         sep (str): column separator
@@ -715,23 +917,26 @@ def yield_sum_stat_records(inf, sep):
         if args.chrom_map:
             chrom = args.chrom_map.get(chrom, chrom)
         # Make sumstat class instance
-        ss_record = SumStatRecord(chrom,
-                                  row[args.pos_col],
-                                  row[args.otherAl_col],
-                                  row[args.effAl_col],
-                                  row.get(args.beta_col, None),
-                                  row.get(args.zscore_col, None),
-                                  row.get(args.or_col, None),
-                                  row.get(args.or_col_lower, None),
-                                  row.get(args.or_col_upper, None),
-                                  row.get(args.eaf_col, None),
-                                  row.get(args.rsid_col, None),
-                                  row,
-                                  row[args.hm_coordinate_conversion])
+        ss_record = SumStatRecord(
+            chrom,
+            row[args.pos_col],
+            row[args.otherAl_col],
+            row[args.effAl_col],
+            row.get(args.beta_col, None),
+            row.get(args.zscore_col, None),
+            row.get(args.or_col, None),
+            row.get(args.or_col_lower, None),
+            row.get(args.or_col_upper, None),
+            row.get(args.eaf_col, None),
+            row.get(args.rsid_col, None),
+            row,
+            row[args.hm_coordinate_conversion],
+        )
         yield ss_record
 
+
 def parse_sum_stats(inf, sep):
-    """ Yields a line at a time from the summary statistics file.
+    """Yields a line at a time from the summary statistics file.
     Args:
         inf (str): input file
         sep (str): column separator
@@ -744,37 +949,42 @@ def parse_sum_stats(inf, sep):
         header = in_handle.readline().decode("utf-8").rstrip().split(sep)
         # Assert that all column arguments are contained in header
         for arg, value in args.__dict__.items():
-            if '_col' in arg and value:
-                assert value in header, \
-                'Error: --{0} {1} not found in input header'.format(arg, value)
+            if "_col" in arg and value:
+                assert (
+                    value in header
+                ), "Error: --{0} {1} not found in input header".format(arg, value)
         # Iterate over lines
         for line in in_handle:
             values = line.decode("utf-8").rstrip().split(sep)
             # Replace any na_rep_in values with None
-            values = [value if value != args.na_rep_in else None
-                      for value in values]
+            values = [value if value != args.na_rep_in else None for value in values]
             # Check we have the correct number of elements
-            assert len(values) == len(header), 'Error: column length ({0}) does not match header length ({1})'.format(len(values), len(header))
+            assert len(values) == len(
+                header
+            ), "Error: column length ({0}) does not match header length ({1})".format(
+                len(values), len(header)
+            )
             yield OrderedDict(zip(header, values))
 
+
 def open_gzip(inf, rw="rb"):
-    """ Returns handle using gzip if gz file extension.
-    """
+    """Returns handle using gzip if gz file extension."""
     if inf.split(".")[-1] == "gz":
         return gzip.open(inf, rw)
     else:
         return open(inf, rw)
 
+
 def str2bool(v):
-    """ Parses argpare boolean input
-    """
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+    """Parses argpare boolean input"""
+    if v.lower() in ("yes", "true", "t", "y", "1"):
         return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+    elif v.lower() in ("no", "false", "f", "n", "0"):
         return False
     else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
+        raise argparse.ArgumentTypeError("Boolean value expected.")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
 
     main()
