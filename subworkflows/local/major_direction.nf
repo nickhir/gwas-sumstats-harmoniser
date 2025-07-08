@@ -17,6 +17,7 @@ workflow major_direction{
         // chroms is just a list of 1,2,3,4...
         chroms=chr.flatten().map{it.toString().replaceAll("chr","")}.collect()
         subsample_variants(files)
+        alias_ch=subsample_variants.out.subsampled.map{tuple(it[0],it[3])}
         map_to_build(subsample_variants.out.subsampled, chroms)
         //example: output is [GCST1,[path of 1.merged, path of 2.merged .....]]
         // map_to_build.out.mapped looks like this
@@ -117,6 +118,7 @@ workflow major_direction{
         hm_input=hm_input
         direction_sum=direction_sum
         unmapped=unmapped
+        alias_log=alias_ch
 }
 
 // groovy function

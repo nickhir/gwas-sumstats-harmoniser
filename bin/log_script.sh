@@ -3,7 +3,7 @@
 helpFunction()
 {
    echo -e ""
-   echo -e "Usage: $0 -r reference -i input -c count -d removed -h harmonized -u unmapped -q qc -s script -o output -p pipeline_version\n"
+   echo -e "Usage: $0 -r reference -i input -c count -d removed -h harmonized -u unmapped -o output -p pipeline_version -a alias_log\n"
    echo -e "\t-r Reference data\n"
    echo -e "\t-i input raw data\n"
    echo -e "\t-c Total_strand_count\n"
@@ -12,10 +12,11 @@ helpFunction()
    echo -e "\t-u unmapped sites file\n"
    echo -e "\t-o Output file\n"
    echo -e "\t-p Pipeline version\n"
+   echo -e "\t-a Header alias log file\n"
    exit 1 # Exit script after printing help
 }
 
-while getopts "r:i:c:d:h:u:o:p:" opt
+while getopts "r:i:c:d:h:u:o:p:a:" opt
 do
    case "$opt" in
       r ) reference="$OPTARG" ;;
@@ -62,6 +63,13 @@ $(tabix -H $reference | grep source)\n
 $(tabix -H $reference | grep reference)\n
 $(tabix -H $reference | grep dbSNP | sed 's/INFO=<//g' | sed 's/>//g')\n
 ################################################################\n\n" > $output
+
+if [ -n "$alias" ] && [ -f "$alias" ]; then
+    printf "Header column mapping\n" >> $output
+    cat "$alias" >> $output
+    printf "\n" >> $output
+fi
+
 
 printf "3. Mapping result\n\n%.2f%% (%d sites out of %d) were dropped because they could not be mapped.\n%.2f%% (%d sites) were carried forward.\n" \
     "$UNMAPPED_RATE" "$UNMAPPED_SITES" "$TOTAL_SITES" \

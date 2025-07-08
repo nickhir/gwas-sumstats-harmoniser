@@ -15,6 +15,7 @@ process subsample_variants {
     subsample_variants_nf.py \
         -f $tsv \
         -o ${GCST}.subsampled.tsv \
-        -l ${params.subsample_limit ?: 10000000}
+        -l ${params.subsample_limit ?: 10000000} \
+        --alias_log ${GCST}.header_alias.log
     """
 }

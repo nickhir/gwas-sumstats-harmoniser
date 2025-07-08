@@ -34,6 +34,18 @@ REQUIRED_COLUMNS = [
 # At least one of these effect size columns must be present
 EFFECT_SIZE_COLUMNS = [OR_DSET, ZSCORE_DSET, BETA_DSET]
 
+DISPLAY_NAMES = {
+    CHR_DSET: "Chromosome",
+    BP_DSET: "BP",
+    EFFECT_DSET: "Effect allele",
+    OTHER_DSET: "Other allele",
+    OR_DSET: "Odds ratio",
+    ZSCORE_DSET: "Zscore",
+    BETA_DSET: "Beta",
+    PVAL_DSET: "P value",
+    NEG_LOG_PVAL_DSET: "Neg log10 P value",
+}
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -41,6 +53,10 @@ def parse_args():
     parser.add_argument("-o", required=True, help="Output subsampled file")
     parser.add_argument(
         "-l", type=int, default=200000, help="Maximum number of variants to keep"
+    )
+    parser.add_argument(
+        "--alias_log",
+        help="Optional file to write detected header aliases",
     )
     return parser.parse_args()
 
@@ -74,20 +90,15 @@ def open_file(file_path: str, mode: str = "rt"):
 # if its found, then we replace it with the "first" choice name (for example p_value).
 # if not, we just keep the original one.
 def canonicalise_header(header):
-    """Replace known aliases with canonical column names."""
+    """Return canonicalised header and mapping of canonical -> original name."""
     canonical_header = []
+    mapping = {}
     for col in header:
-        original = col
         canonical = ALIAS_LOOKUP.get(col.lower(), col)
-
-        if original.lower() != canonical.lower():
-            print(f"{original} was replaced with {canonical}")
-        else:
-            print(f"{original} was not replaced")
-
         canonical_header.append(canonical)
-
-    return canonical_header
+        # record the first appearance of this canonical name
+        mapping.setdefault(canonical, col)
+    return canonical_header, mapping
 
 
 # all it does is go through potential names of the "pval" column
@@ -138,7 +149,26 @@ def main():
     delim = detect_delim(header_line)
     header_cols = header_line.strip().split(delim) if delim else header_line.split()
     # get the index of the p-value column
-    canon_header = canonicalise_header(header_cols)
+    canon_header, orig_map = canonicalise_header(header_cols)
+    if args.alias_log:
+        with open(args.alias_log, "w") as fh:
+            # determine which columns to report
+            cols_to_report = list(REQUIRED_COLUMNS)
+            cols_to_report += [c for c in EFFECT_SIZE_COLUMNS if c in canon_header]
+            if NEG_LOG_PVAL_DSET in canon_header:
+                cols_to_report.append(NEG_LOG_PVAL_DSET)
+            elif PVAL_DSET in canon_header:
+                cols_to_report.append(PVAL_DSET)
+
+            for canon in cols_to_report:
+                if canon not in orig_map:
+                    continue
+                orig = orig_map[canon]
+                name = DISPLAY_NAMES.get(canon, canon)
+                fh.write(
+                    f"{name} column was identified as {orig} and renamed to {canon}\n"
+                )
+
     # create the output header
     header_out = "\t".join(str(x) for x in canon_header) + "\n"
     # check if required columns were deteceted, otherwise exit
