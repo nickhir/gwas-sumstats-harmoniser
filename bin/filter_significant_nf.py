@@ -3,7 +3,7 @@
 
 import argparse
 import pandas as pd
-from common_constants import PVAL_DSET
+from common_constants import PVAL_DSET, NEG_LOG_PVAL_DSET
 
 
 def parse_args():
@@ -17,8 +17,25 @@ def parse_args():
 
 def main():
     args = parse_args()
-    pvals = pd.read_table(args.f, usecols=[PVAL_DSET], sep=None, engine="python")
-    sig_idx = pvals[pvals[PVAL_DSET] < 1e-5].index.tolist()
+
+    # Determine which p-value column is present
+    header = pd.read_table(args.f, nrows=0, sep=None, engine="python").columns
+    if PVAL_DSET in header:
+        pval_col = PVAL_DSET
+        is_neglog = False
+    elif NEG_LOG_PVAL_DSET in header:
+        pval_col = NEG_LOG_PVAL_DSET
+        is_neglog = True
+    else:
+        raise ValueError(
+            f"Input must contain either {PVAL_DSET} or {NEG_LOG_PVAL_DSET}"
+        )
+
+    pvals = pd.read_table(args.f, usecols=[pval_col], sep=None, engine="python")
+    if is_neglog:
+        sig_idx = pvals[pvals[pval_col] > 5].index.tolist()
+    else:
+        sig_idx = pvals[pvals[pval_col] < 1e-5].index.tolist()
 
     with open(args.f) as fin, open(args.o, "w") as fout:
         fout.write(next(fin))  # header

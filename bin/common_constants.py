@@ -19,7 +19,6 @@ HM_BETA_DSET = "hm_beta"
 HM_EFFECT_DSET = "hm_effect_allele"
 HM_OTHER_DSET = "hm_other_allele"
 HM_FREQ_DSET = "hm_effect_allele_frequency"
-HM_VAR_ID = "hm_variant_id"
 HM_CODE = "hm_code"
 
 # Map each canonical column name to a list of sensible alternative names
