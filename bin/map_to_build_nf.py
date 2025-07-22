@@ -62,8 +62,11 @@ def merge_ss_vcf(ss, vcf, from_build, to_build, chroms, coordinate):
     if not ssdf_with_rsid.empty:
         for vcf in vcfs:
             # from the vcf file name, extract the chromosome we are currently processing.
-            pattern = re.compile(r"chr([0-9]+|X|Y)")
-            file_chr = pattern.search(vcf).group(1)
+            pattern = re.compile(r"chr([0-9]+|X|Y|MT)")
+            match = pattern.search(vcf)
+            if not match:
+                sys.exit(f"Error: could not extract chromosome from path: {vcf}")
+            file_chr = match.group(1)
             if not file_chr:
                 sys.exit(f"Error: could not extract chromosome from path: {vcf}")
 

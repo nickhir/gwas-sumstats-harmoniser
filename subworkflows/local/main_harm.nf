@@ -13,8 +13,9 @@ workflow main_harm {
     harmonization(hm_input)
     //hm_by_chrom: [GCST009150, forward, path of hm, path of log]
     //hm_input.map{it[6]}.dump(tag:'bar')
+    int nchr = params.chrom.size()
     id_palin_ch = harmonization.out.hm_by_chrom.map{it[0,1]}.unique()
-    hm_files = harmonization.out.hm_by_chrom.map{it[0,2]}.groupTuple()
+    hm_files = harmonization.out.hm_by_chrom.map{it[0,2]}.groupTuple(size: nchr)
     concatenate_in_ch = id_palin_ch.join(hm_files)
 
     //concatenate_in_ch: [GCST008127,forward, path of hm]

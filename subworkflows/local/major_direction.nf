@@ -71,9 +71,9 @@ workflow major_direction{
         int nchr=params.chrom.size()
 
 
-        ten_to_sum=ten_percent_counts.out
+        ten_to_sum = ten_percent_counts.out
                         .ten_sc
-                        .groupTuple(by: 0) // combine the outputs by GCST ID -> [GCST_ID, [[list to .sc files per chrom]]]
+                        .groupTuple(by: 0, size: nchr) // combine the outputs by GCST ID -> [GCST_ID, [[list to .sc files per chrom]]]
                         .branch{pass:it[1].size()==nchr} //if the number of .sc is not equal to the total number of processed chromosomes we stop. otherwise continue
                         .map{it[0]}
 
