@@ -17,6 +17,7 @@ from common_constants import (
     OR_DSET,
     ZSCORE_DSET,
     BETA_DSET,
+    SE_DSET,
 )
 
 # Columns that must be present for downstream steps
@@ -42,6 +43,7 @@ DISPLAY_NAMES = {
     OR_DSET: "Odds ratio",
     ZSCORE_DSET: "Zscore",
     BETA_DSET: "Beta",
+    SE_DSET: "Standard error",
     PVAL_DSET: "P value",
     NEG_LOG_PVAL_DSET: "Neg log10 P value",
 }
@@ -86,19 +88,31 @@ def open_file(file_path: str, mode: str = "rt"):
     return open(file_path, mode)
 
 
+def format_line(line: str, delim: str, indices):
+    """Return tab-separated line with selected columns."""
+    parts = line.rstrip("\n").split(delim) if delim else line.split()
+    selected = [parts[i] if i < len(parts) else "" for i in indices]
+    return "\t".join(selected) + "\n"
+
+
 # go through each column name and look it up in the alias_lookup.
 # if its found, then we replace it with the "first" choice name (for example p_value).
-# if not, we just keep the original one.
+# IF NO MATCH IS FOUND THE COLUMN WILL BE REMOVED!!
 def canonicalise_header(header):
-    """Return canonicalised header and mapping of canonical -> original name."""
+    """Return canonicalised header, mapping and indices of recognised columns."""
     canonical_header = []
     mapping = {}
-    for col in header:
-        canonical = ALIAS_LOOKUP.get(col.lower(), col)
+    keep_idx = []
+    for i, col in enumerate(header):
+        canonical = ALIAS_LOOKUP.get(col.lower())
+        if canonical is None:
+            # skip unrecognised columns
+            continue
         canonical_header.append(canonical)
+        keep_idx.append(i)
         # record the first appearance of this canonical name
         mapping.setdefault(canonical, col)
-    return canonical_header, mapping
+    return canonical_header, mapping, keep_idx
 
 
 # all it does is go through potential names of the "pval" column
@@ -149,7 +163,7 @@ def main():
     delim = detect_delim(header_line)
     header_cols = header_line.strip().split(delim) if delim else header_line.split()
     # get the index of the p-value column
-    canon_header, orig_map = canonicalise_header(header_cols)
+    canon_header, orig_map, keep_idx = canonicalise_header(header_cols)
     if args.alias_log:
         with open(args.alias_log, "w") as fh:
             # determine which columns to report
@@ -174,6 +188,7 @@ def main():
     # check if required columns were deteceted, otherwise exit
     check_required_columns(canon_header)
     pval_col, pval_idx, is_neglog = detect_pval_col(canon_header)
+    pval_idx_orig = keep_idx[pval_idx]
     # first pass: count total rows and collect significant indices
     sig_idx = []
     total = 0
@@ -182,7 +197,7 @@ def main():
         for i, line in enumerate(f):
             total += 1
             try:
-                val = read_pval(line, pval_idx, delim)
+                val = read_pval(line, pval_idx_orig, delim)
             except (IndexError, ValueError):
                 continue
             if is_neglog:
@@ -198,7 +213,7 @@ def main():
             next(fin)  # drop header
             fout.write(header_out)
             for line in fin:
-                fout.write(line)
+                fout.write(format_line(line, delim, keep_idx))
         return
 
     # if more significant variants than the limit, write all significant variants
@@ -209,7 +224,7 @@ def main():
             fout.write(header_out)
             for i, line in enumerate(fin):
                 if i in keep_rows:
-                    fout.write(line)
+                    fout.write(format_line(line, delim, keep_idx))
         return
 
     # calculate the number of random rows to sample
@@ -231,7 +246,7 @@ def main():
         fout.write(header_out)
         for i, line in enumerate(fin):
             if i in keep_rows:
-                fout.write(line)
+                fout.write(format_line(line, delim, keep_idx))
 
 
 if __name__ == "__main__":

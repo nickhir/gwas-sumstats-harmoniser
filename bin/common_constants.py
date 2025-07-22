@@ -7,6 +7,7 @@ RANGE_U_DSET = "ci_upper"
 RANGE_L_DSET = "ci_lower"
 BETA_DSET = "beta"
 ZSCORE_DSET = "z_score"
+SE_DSET = "standard_error"
 RSID = "rsid"
 EFFECT_DSET = "effect_allele"
 OTHER_DSET = "other_allele"
@@ -116,6 +117,14 @@ COLUMN_ALIASES = {
         "z_score",
         "zvalue",
         "z_statistic",
+    ],
+    SE_DSET: [
+        "se",
+        "stderr",
+        "std_err",
+        "se_beta",
+        "sebeta",
+        "se_beta_est",
     ],
     RSID: [
         "snp",
