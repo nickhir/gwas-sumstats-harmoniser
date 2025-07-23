@@ -3,7 +3,6 @@ process subsample_variants {
 
     container "${task.ext.singularity}${task.ext.singularity_version}"
 
-
     input:
         tuple val(GCST), path(yaml), path(tsv)
 

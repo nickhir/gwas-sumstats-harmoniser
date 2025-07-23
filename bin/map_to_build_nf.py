@@ -19,7 +19,6 @@ import argparse
 from ast import literal_eval
 
 import pyarrow.parquet as pq
-from tqdm import tqdm
 import re
 
 # Allow very large fields in input file-------------
