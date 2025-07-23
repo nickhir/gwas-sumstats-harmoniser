@@ -117,19 +117,38 @@ def canonicalise_header(header):
 
 
 def resolve_rsid_duplicate(file_path, delim, indices):
-    """Return the index that contains rsIDs from a list of indices."""
+    """Return the index that most likely contains rsIDs from a list of indices.
+
+    The function samples up to 20,000 rows from ``file_path`` and counts, for
+    each candidate column index in ``indices``, how many values begin with the
+    string ``"rs"``.  The column with the highest count is returned.  If counts
+    are tied the column appearing first in ``indices`` is used.
+    """
+    counts = {idx: 0 for idx in indices}
     with open_file(file_path) as f:
         next(f)  # skip header
+        sampled = 0
         for line in f:
             if not line.strip():
                 continue
             parts = line.rstrip("\n").split(delim) if delim else line.split()
-            values = [parts[i] if i < len(parts) else "" for i in indices]
-            matches = [i for i, v in enumerate(values) if v.lower().startswith("rs")]
-            if len(matches) == 1:
-                return indices[matches[0]]
-    # default to the first if no distinguishing row found
-    return indices[0]
+            for idx in indices:
+                value = parts[idx] if idx < len(parts) else ""
+                if value.lower().startswith("rs"):
+                    counts[idx] += 1
+            sampled += 1
+            if sampled >= 20000:
+                break
+
+    # choose the index with the highest rsID count
+    chosen = max(indices, key=lambda i: counts[i])
+    if counts[chosen] == 0:
+        cols = ", ".join(str(i + 1) for i in indices)
+        sys.exit(
+            "Unable to resolve duplicate RSID columns: none of the candidates"
+            f" ({cols}) contain values starting with 'rs'."
+        )
+    return chosen
 
 
 # all it does is go through potential names of the "pval" column
@@ -183,7 +202,7 @@ def main():
     canon_header, orig_map, keep_idx = canonicalise_header(header_cols)
     idx_map = {}
     for i, canon in enumerate(canon_header):
-        # in the dictonary idx_map try and get the key for canon. if it doesn't exist, create an empty list 
+        # in the dictonary idx_map try and get the key for canon. if it doesn't exist, create an empty list
         # and to the list append the index i
         # IF a canon header name occures twice, then the list will contain two indices!
         idx_map.setdefault(canon, []).append(i)
