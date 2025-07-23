@@ -15,6 +15,7 @@ from common_constants import (
     EFFECT_DSET,
     OTHER_DSET,
     OR_DSET,
+    RSID,
     ZSCORE_DSET,
     BETA_DSET,
     SE_DSET,
@@ -115,6 +116,22 @@ def canonicalise_header(header):
     return canonical_header, mapping, keep_idx
 
 
+def resolve_rsid_duplicate(file_path, delim, indices):
+    """Return the index that contains rsIDs from a list of indices."""
+    with open_file(file_path) as f:
+        next(f)  # skip header
+        for line in f:
+            if not line.strip():
+                continue
+            parts = line.rstrip("\n").split(delim) if delim else line.split()
+            values = [parts[i] if i < len(parts) else "" for i in indices]
+            matches = [i for i, v in enumerate(values) if v.lower().startswith("rs")]
+            if len(matches) == 1:
+                return indices[matches[0]]
+    # default to the first if no distinguishing row found
+    return indices[0]
+
+
 # all it does is go through potential names of the "pval" column
 # and if the potential name matches any name in the header, return that index which is used for the read_pval function
 def detect_pval_col(header):
@@ -164,6 +181,28 @@ def main():
     header_cols = header_line.strip().split(delim) if delim else header_line.split()
     # get the index of the p-value column
     canon_header, orig_map, keep_idx = canonicalise_header(header_cols)
+    idx_map = {}
+    for i, canon in enumerate(canon_header):
+        # in the dictonary idx_map try and get the key for canon. if it doesn't exist, create an empty list 
+        # and to the list append the index i
+        # IF a canon header name occures twice, then the list will contain two indices!
+        idx_map.setdefault(canon, []).append(i)
+    for canon, idx_list in list(idx_map.items()):
+        if len(idx_list) > 1:
+            # only if the duplicated column is the RSID column, we resolve it, otherwise ERROR
+            if canon == RSID:
+                candidate_indices = [keep_idx[i] for i in idx_list]
+                chosen = resolve_rsid_duplicate(args.f, delim, candidate_indices)
+                keep_canon_idx = idx_list[candidate_indices.index(chosen)]
+                for j in sorted(idx_list, reverse=True):
+                    if j != keep_canon_idx:
+                        del canon_header[j]
+                        del keep_idx[j]
+                orig_map[canon] = header_cols[chosen]
+            else:
+                cols = [header_cols[keep_idx[i]] for i in idx_list]
+                sys.exit(f"Multiple columns mapped to {canon}: {', '.join(cols)}")
+
     if args.alias_log:
         with open(args.alias_log, "w") as fh:
             # determine which columns to report
