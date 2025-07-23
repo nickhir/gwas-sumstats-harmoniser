@@ -11,10 +11,6 @@ import liftover as lft
 
 # in common_constants there are a lot of variables defined...
 import sys
-
-sys.path.append(
-    "/rds/user/nh608/hpc-work/phenoscanner/harmoniser/gwas-sumstats-harmoniser/bin"
-)
 from common_constants import *
 
 import os
