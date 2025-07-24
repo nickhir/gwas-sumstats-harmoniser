@@ -71,10 +71,11 @@ def remove_row_if_required_is_blank(row, header):
 
 
 def remove_row_if_unharmonisable(row, header):
-    if row[header.index(HM_CODE)] in HM_CODE_FILTER:
-        return True
-    else:
+    try:
+        hm_val = int(row[header.index(HM_CODE)])
+    except (ValueError, TypeError):
         return False
+    return hm_val in HM_CODE_FILTER
 
 
 def blanks_to_NA(row):

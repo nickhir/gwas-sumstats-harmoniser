@@ -21,12 +21,22 @@ process map_to_build {
     from_build=\$((grep genome_assembly $yaml | grep -Eo '[0-9][0-9]') || (echo \$(basename $tsv) | grep -Eo '[bB][a-zA-Z]*[0-9][0-9]' | grep -Eo '[0-9][0-9]'))
     [[ -z "\$from_build" ]] && { echo "Parameter from_build is empty" ; exit 1; }
     
-    map_to_build_nf.py \
-    -f $tsv \
-    -from_build \$from_build \
-    -to_build $params.to_build \
-    -vcf "${params.ref}/homo_sapiens-chr*.parquet" \
-    -chroms "${chr}" \
-    -coordinate \$coordinate
+    # Check if liftover_only parameter is set to use liftover-only script
+    if [[ "${params.liftover_only}" == "true" ]]; then
+        map_to_build_nf_liftover.py \
+        -f $tsv \
+        -from_build \$from_build \
+        -to_build $params.to_build \
+        -chroms "${chr}" \
+        -coordinate \$coordinate
+    else
+        map_to_build_nf.py \
+        -f $tsv \
+        -from_build \$from_build \
+        -to_build $params.to_build \
+        -vcf "${params.ref}/homo_sapiens-chr*.parquet" \
+        -chroms "${chr}" \
+        -coordinate \$coordinate
+    fi
     """
 }
