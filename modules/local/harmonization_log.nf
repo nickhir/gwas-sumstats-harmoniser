@@ -18,7 +18,8 @@ process harmonization_log {
     shell:
     """
     # Generating running log
-    log_script.sh \
+    N=\$(awk -v RS='\t' '/hm_code/{print NR; exit}' $qc_result)
+    sed 1d $qc_result | awk -F "\t" '{print \$'"\$N"'}' | create_log.py \
     -r "${params.ref}/homo_sapiens-${chr}.vcf.gz" \
     -i $input \
     -c $count \
@@ -28,9 +29,6 @@ process harmonization_log {
     -o ${GCST}.running.log \
     -p ${params.version} \
     -a $alias_log
-
-    N=\$(awk -v RS='\t' '/hm_code/{print NR; exit}' $qc_result)
-    sed 1d $qc_result| awk -F "\t" '{print \$'"\$N"'}' | creat_log.py >> ${GCST}.running.log
     
     # extract harmonise result
     result=\$(grep Result ${GCST}.running.log | cut -f2)
