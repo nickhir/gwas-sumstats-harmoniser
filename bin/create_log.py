@@ -209,7 +209,7 @@ def main():
         "################################################################\n\n"
     )
 
-    out_lines.append("4. Mapping result\n\n")
+    out_lines.append("4. Mapping result\n")
     out_lines.append(
         f"{unmapped_rate:.2f}% ({unmapped_sites} sites out of {total_sites}) were dropped because they could not be mapped.\n{mapped_rate:.2f}% ({mapped_sites} sites) were carried forward.\n"
     )
