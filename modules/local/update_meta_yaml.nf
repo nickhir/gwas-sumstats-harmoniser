@@ -41,6 +41,7 @@ process update_meta_yaml {
 
     """
     out_yaml="${GCST}.h.tsv.gz-meta.yaml"
+    tmp_yaml="${GCST}.tmp.meta.yaml"
     pipeline_command="${workflow.commandLine}"
     pipeline_finish_time=\$(date +"%H:%M, %d.%m.%y")
 
@@ -50,7 +51,7 @@ process update_meta_yaml {
     ${newRefCmd}
     gwas_metadata.py \
         -i ${raw_yaml} \
-        -o \$out_yaml \
+        -o \$tmp_yaml \
         -e \
         --genome_assembly GRCh38 \
         --coordinate_system 1-based \
@@ -58,5 +59,9 @@ process update_meta_yaml {
         --pipeline_finish_time "\$pipeline_finish_time" \
         --harmonisation_reference \$harmonisation_reference \
         ${newRefArg}
+        
+    update_yaml_with_log.py $tmp_yaml ${running_log} $out_yaml
+    rm $tmp_yaml
+
     """
 }
