@@ -102,7 +102,12 @@ def summarise_hm_codes(codes):
     with open("report.txt") as f:
         fails = f.readlines()
 
-    total = sum(counts.values()) + len(fails)
+    # After QC stopped removing rows, `report.txt` simply logs problematic
+    # variants.  These variants are still present in the harmonised output and
+    # therefore already counted above.  To keep the summary consistent with the
+    # actual number of variants in the result file, ignore the number of logged
+    # failures when calculating the total.
+    total = sum(counts.values())
     lines = []
     lines.append("\n6. Successfully harmonised variants\n")
     success_codes = [c for c in counts if c < 14 and c != 9]
