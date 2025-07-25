@@ -193,11 +193,10 @@ def main():
                     wrong_type_bp == False,
                     wrong_type_pval == False,
                 ]
-                if all(remove_row_tests):
-                    if not args.print_only:
-                        writer.writerows([row])
-                else:
-                    # print lines that are removed
+                if not args.print_only:
+                    writer.writerows([row])
+
+                if not all(remove_row_tests):
                     hm_code = int(row[header.index(HM_CODE)])
                     if hm_code not in HM_CODE_FILTER:
                         hm_code = 19

@@ -87,6 +87,8 @@ def main():
             vcf_rec, ret_code = exract_matching_record_from_vcf_records(
                 ss_rec, vcf_recs
             )
+            # if harmonization was succesfull, ret_code will be None
+            # so this is only run when it was NOT successful
             if ret_code and new_tbx:
                 if int(coordinate[0]) == 0 and ss_rec.lifmethod == "lo":
                     if len(str(ss_rec.effect_al)) + len(str(ss_rec.other_al)) > 2:
