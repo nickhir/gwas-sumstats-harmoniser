@@ -47,6 +47,7 @@ def main():
 
     #######YUE################
     tbx = pysam.TabixFile(args.vcf)
+    new_tbx = pysam.TabixFile(args.new_vcf) if args.new_vcf else None
     #######YUE################
 
     # Process each row in summary statistics
@@ -86,6 +87,26 @@ def main():
             vcf_rec, ret_code = exract_matching_record_from_vcf_records(
                 ss_rec, vcf_recs
             )
+            if ret_code and new_tbx:
+                if int(coordinate[0]) == 0 and ss_rec.lifmethod == "lo":
+                    if len(str(ss_rec.effect_al)) + len(str(ss_rec.other_al)) > 2:
+                        vcf_recs = get_vcf_records_0base(
+                            new_tbx, ss_rec.chrom, ss_rec.pos
+                        )
+                    else:
+                        vcf_recs = get_vcf_records(new_tbx, ss_rec.chrom, ss_rec.pos)
+                else:
+                    vcf_recs = get_vcf_records(new_tbx, ss_rec.chrom, ss_rec.pos)
+                vcf_rec2, ret_code2 = exract_matching_record_from_vcf_records(
+                    ss_rec, vcf_recs
+                )
+                if not ret_code2:
+                    vcf_rec = vcf_rec2
+                    ret_code = None
+                    ss_rec.hm_code = None
+                else:
+                    ret_code = ret_code2
+                    ss_rec.hm_code = ret_code2
 
             # Set return code when vcf_rec was not found
             if ret_code:
@@ -154,20 +175,32 @@ def main():
         if args.hm_sumstats:
             out_raw = OrderedDict()
             out_raw["chromosome"] = (
-                ss_rec.hm_chrom if vcf_rec and ss_rec.is_harmonised else (ss_rec.chrom if ss_rec.chrom is not None else args.na_rep_out)
+                ss_rec.hm_chrom
+                if vcf_rec and ss_rec.is_harmonised
+                else (ss_rec.chrom if ss_rec.chrom is not None else args.na_rep_out)
             )
             out_raw["base_pair_location"] = (
-                ss_rec.hm_pos if vcf_rec and ss_rec.is_harmonised else (ss_rec.pos if ss_rec.pos is not None else args.na_rep_out)
+                ss_rec.hm_pos
+                if vcf_rec and ss_rec.is_harmonised
+                else (ss_rec.pos if ss_rec.pos is not None else args.na_rep_out)
             )
             out_raw["effect_allele"] = (
                 ss_rec.hm_effect_al.str()
                 if vcf_rec and ss_rec.is_harmonised
-                else (ss_rec.effect_al.str() if ss_rec.effect_al is not None else args.na_rep_out)
+                else (
+                    ss_rec.effect_al.str()
+                    if ss_rec.effect_al is not None
+                    else args.na_rep_out
+                )
             )
             out_raw["other_allele"] = (
                 ss_rec.hm_other_al.str()
                 if vcf_rec and ss_rec.is_harmonised
-                else (ss_rec.other_al.str() if ss_rec.other_al is not None else args.na_rep_out)
+                else (
+                    ss_rec.other_al.str()
+                    if ss_rec.other_al is not None
+                    else args.na_rep_out
+                )
             )
             out_raw["beta"] = (
                 ss_rec.beta
@@ -187,12 +220,20 @@ def main():
             out_raw["ci_lower"] = (
                 ss_rec.oddsr_lower
                 if ss_rec.oddsr_lower is not None and ss_rec.is_harmonised
-                else (ss_rec.oddsr_lower if ss_rec.oddsr_lower is not None else args.na_rep_out)
+                else (
+                    ss_rec.oddsr_lower
+                    if ss_rec.oddsr_lower is not None
+                    else args.na_rep_out
+                )
             )
             out_raw["ci_upper"] = (
                 ss_rec.oddsr_upper
                 if ss_rec.oddsr_upper is not None and ss_rec.is_harmonised
-                else (ss_rec.oddsr_upper if ss_rec.oddsr_upper is not None else args.na_rep_out)
+                else (
+                    ss_rec.oddsr_upper
+                    if ss_rec.oddsr_upper is not None
+                    else args.na_rep_out
+                )
             )
             out_raw["effect_allele_frequency"] = (
                 ss_rec.eaf
@@ -234,10 +275,16 @@ def main():
             out_raw["variant_id"] = (
                 vcf_rec.hgvs()[0]
                 if vcf_rec and ss_rec.is_harmonised
-                else (ss_rec.data.get("variant_id") if ss_rec.data.get("variant_id") is not None else args.na_rep_out)
+                else (
+                    ss_rec.data.get("variant_id")
+                    if ss_rec.data.get("variant_id") is not None
+                    else args.na_rep_out
+                )
             )
             out_raw["rsid"] = (
-                ss_rec.hm_rsid if vcf_rec and ss_rec.is_harmonised else (ss_rec.rsid if ss_rec.rsid is not None else args.na_rep_out)
+                ss_rec.hm_rsid
+                if vcf_rec and ss_rec.is_harmonised
+                else (ss_rec.rsid if ss_rec.rsid is not None else args.na_rep_out)
             )
             try:
                 out_raw["standard_error"] = (
@@ -349,6 +396,12 @@ def parse_args():
         help=("Reference VCF file. Use # as chromosome wildcard."),
         type=str,
         required=True,
+    )
+    infile_group.add_argument(
+        "--new_vcf",
+        metavar="<file>",
+        help=("Optional newer reference VCF file used as second pass"),
+        type=str,
     )
 
     # Output file args

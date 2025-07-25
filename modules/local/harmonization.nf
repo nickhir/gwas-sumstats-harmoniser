@@ -32,6 +32,7 @@ process harmonization {
         main_pysam.py \
         --sumstats $merged \
         --vcf ${params.ref}/homo_sapiens-${chrom}.vcf.gz \
+        ${params.new_ref ? "--new_vcf ${params.new_ref}/homo_sapiens-${chrom}.vcf.gz" : ""} \
         --hm_sumstats ${chrom}.merged_unsorted.hm \
         --hm_statfile ${chrom}.merged.log.tsv.gz \
         \$header_args \

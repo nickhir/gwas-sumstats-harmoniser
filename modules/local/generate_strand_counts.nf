@@ -27,6 +27,7 @@ process generate_strand_counts {
     main_pysam.py \
     --sumstats $merged \
     --vcf ${params.ref}/homo_sapiens-${chrom}.vcf.gz \
+    ${params.new_ref ? "--new_vcf ${params.new_ref}/homo_sapiens-${chrom}.vcf.gz" : ""} \
     \$header_args \
     --strand_counts full_${chrom}.sc \
     --coordinate \$coordinate
