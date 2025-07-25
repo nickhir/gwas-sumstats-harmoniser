@@ -61,6 +61,15 @@ def parse_args():
         "--alias_log",
         help="Optional file to write detected header aliases",
     )
+    parser.add_argument(
+        "--effect_col",
+        help="Column name for the effect allele",
+    )
+    parser.add_argument(
+        "--other_col",
+        help="Column name for the other allele",
+    )
+
     return parser.parse_args()
 
 
@@ -191,6 +200,14 @@ def check_required_columns(header):
 def main():
     args = parse_args()
     limit = args.l
+
+    # allow custom allele column names by registering them as aliases
+    if args.effect_col:
+        COLUMN_ALIASES.setdefault(EFFECT_DSET, []).append(args.effect_col)
+        ALIAS_LOOKUP[args.effect_col.lower()] = EFFECT_DSET
+    if args.other_col:
+        COLUMN_ALIASES.setdefault(OTHER_DSET, []).append(args.other_col)
+        ALIAS_LOOKUP[args.other_col.lower()] = OTHER_DSET
 
     # read in file line by line to not overload memory...
     with open_file(args.f) as f:
