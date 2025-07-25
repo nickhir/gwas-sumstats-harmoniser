@@ -59,6 +59,10 @@ process update_meta_yaml {
         --harmonisation_reference \$harmonisation_reference \
         ${newRefArg} \
         --log ${running_log}
-
+    
+    if [[ ${params.cleanup_intermediate} == true ]]; then
+        rm -rf ${params.outdir ?: launchDir}/${GCST}/2_ten_sc
+        rm -rf ${params.outdir ?: launchDir}/${GCST}/3_all_sc
+    fi
     """
 }
