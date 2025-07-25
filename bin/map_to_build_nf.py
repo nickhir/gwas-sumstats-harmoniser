@@ -43,6 +43,28 @@ def merge_ss_vcf(ss, vcf, from_build, to_build, chroms, coordinate):
 
     ssdf = pd.read_table(ss, sep=None, engine="python", dtype=str)
     add_fields_if_missing(df=ssdf)
+
+    # If the input is already on the desired build, skip any mapping/liftover
+    if from_build == to_build:
+        print(
+            "source and target builds are identical - skipping RSID mapping and liftover"
+        )
+        ssdf[HM_CC_DSET] = "NA"
+        for chrom in chroms:
+            df = ssdf.loc[ssdf[CHR_DSET].astype(str) == chrom]
+            df = df.dropna(subset=[BP_DSET])
+            df[BP_DSET] = df[BP_DSET].astype(str).str.replace(r"\..*$", "", regex=True)
+            outfile = os.path.join(f"{chrom}.merged")
+            df.to_csv(outfile, sep="\t", mode="w", index=False, na_rep="NA")
+
+        no_chr_df = ssdf[ssdf[CHR_DSET].isnull()]
+        no_pos_df = ssdf[ssdf[BP_DSET].isnull()]
+        no_loc_df = pd.concat([no_chr_df, no_pos_df])
+        no_loc_df[HM_CC_DSET] = "NA"
+        outfile = os.path.join("unmapped")
+        no_loc_df.to_csv(outfile, sep="\t", index=False, na_rep="NA")
+        return
+
     # creates a list of True False depending on if there is an rsid
     rsid_mask = ssdf[RSID].str.startswith("rs").fillna(False)
     ssdf_with_rsid = ssdf[rsid_mask]
@@ -96,10 +118,10 @@ def merge_ss_vcf(ss, vcf, from_build, to_build, chroms, coordinate):
                     mapped_rsids.update(mapped[RSID].tolist())
 
                 mapped[CHR_DSET] = (
-                    mapped["CHR"].astype("str").str.replace("\..*$", "", regex=True)
+                    mapped["CHR"].astype("str").str.replace(r"\..*$", "", regex=True)
                 )
                 mapped[BP_DSET] = (
-                    mapped["POS"].astype("str").str.replace("\..*$", "", regex=True)
+                    mapped["POS"].astype("str").str.replace(r"\..*$", "", regex=True)
                 )
                 mapped = mapped[header]
                 mapped[HM_CC_DSET] = "rs"
@@ -142,7 +164,7 @@ def merge_ss_vcf(ss, vcf, from_build, to_build, chroms, coordinate):
     for chrom in chroms:
         df = ssdf.loc[ssdf[CHR_DSET].astype("str") == chrom]
         df = df.dropna(subset=[BP_DSET])
-        df[BP_DSET] = df[BP_DSET].astype("str").str.replace("\..*$", "")
+        df[BP_DSET] = df[BP_DSET].astype("str").str.replace(r"\..*$", "")
         outfile = os.path.join("{}.merged".format(chrom))
         if os.path.isfile(outfile):
             print("df to {}".format(outfile))

@@ -35,13 +35,16 @@ def liftover_ss(ss, from_build, to_build, chroms, coordinate):
     """Liftover variants in ``ss`` to ``to_build``."""
     ssdf = pd.read_table(ss, sep=None, engine="python", dtype=str)
     add_fields_if_missing(df=ssdf)
-    ssdf[HM_CC_DSET] = "lo"
+    build_map = None
+    if from_build == to_build:
+        print("source and target builds are identical - skipping liftover")
+        ssdf[HM_CC_DSET] = "NA"
+    else:
+        ssdf[HM_CC_DSET] = "lo"
+        build_map = lft.LiftOver(
+            lft.ucsc_release.get(from_build), lft.ucsc_release.get(to_build)
+        )
 
-    build_map = (
-        lft.LiftOver(lft.ucsc_release.get(from_build), lft.ucsc_release.get(to_build))
-        if from_build != to_build
-        else None
-    )
     if build_map:
         ssdf[BP_DSET] = [
             lft.map_bp_to_build_via_liftover(
@@ -53,7 +56,7 @@ def liftover_ss(ss, from_build, to_build, chroms, coordinate):
     for chrom in chroms:
         df = ssdf.loc[ssdf[CHR_DSET].astype("str") == chrom]
         df = df.dropna(subset=[BP_DSET])
-        df[BP_DSET] = df[BP_DSET].astype("str").str.replace("\..*$", "")
+        df[BP_DSET] = df[BP_DSET].astype("str").str.replace(r"\..*$", "")
         outfile = os.path.join(f"{chrom}.merged")
         if os.path.isfile(outfile):
             df.to_csv(
@@ -115,7 +118,9 @@ def add_column_to_df(df, column, value="NA"):
 
 def main():
     argparser = argparse.ArgumentParser()
-    argparser.add_argument("-f", help="The name of the file to be processed", required=True)
+    argparser.add_argument(
+        "-f", help="The name of the file to be processed", required=True
+    )
     argparser.add_argument("-vcf", help="(unused) The name of the vcf file")
     argparser.add_argument("--log", help="The name of the log file")
     argparser.add_argument(
