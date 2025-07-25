@@ -19,7 +19,8 @@ process update_meta_yaml {
     # metadata file
 
     out_yaml="${GCST}.h.tsv.gz-meta.yaml"
-    date_metadata_last_modified=\$(date  +"%Y-%m-%d")
+    pipeline_command="${workflow.commandLine}"
+    pipeline_finish_time=\$(date +"%H:%M, %d.%m.%y")
     harmonisation_reference=\$(tabix -H "${params.ref}/homo_sapiens-${chr}.vcf.gz" | grep reference | cut -f2 -d '=')
 
     gwas_metadata.py \
@@ -28,7 +29,8 @@ process update_meta_yaml {
     -e \
     --genome_assembly GRCh38 \
     --coordinate_system 1-based \
-    --date_metadata_last_modified \$date_metadata_last_modified \
+    --pipeline_command "\$pipeline_command" \
+    --pipeline_finish_time "\$pipeline_finish_time" \
     --harmonisation_reference \$harmonisation_reference \
     """
 }
